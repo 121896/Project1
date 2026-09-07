@@ -1466,9 +1466,19 @@
     $("#notificationBadge").textContent = String(Math.min(unread, 99));
     $("#notificationList").innerHTML = items.length ? items.map(item => `
       <article class="notification-item${item.read ? "" : " unread"}">
-        <strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.message)}</p>
-        ${item.createdAt ? `<time>${new Date(item.createdAt).toLocaleString("ko-KR")}</time>` : ""}
+        <div class="notification-item-content"><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.message)}</p>
+        ${item.createdAt ? `<time>${new Date(item.createdAt).toLocaleString("ko-KR")}</time>` : ""}</div>
+        ${item.page ? `<button class="button secondary small notification-move-button" type="button" data-notification-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)} 페이지로 이동">→</button>` : ""}
       </article>`).join("") : '<div class="empty-state"><div><strong>새 알림이 없습니다.</strong><span>중요한 학습 소식이 여기에 표시됩니다.</span></div></div>';
+  }
+
+  function openNotificationTarget(item) {
+    if (!item?.page) return;
+    state.notifications = (state.notifications || []).map(notification => notification.id === item.id ? { ...notification, read: true } : notification);
+    state.notificationReadKeys = [...new Set([...(state.notificationReadKeys || []), item.id])];
+    saveState();
+    closeModal("notificationModal");
+    showPage(item.page);
   }
 
   function restoreQuizSetForSubject(code) {
@@ -1687,6 +1697,18 @@
   $("#notificationButton").addEventListener("click", () => {
     renderNotifications();
     openModal("notificationModal");
+  });
+  $("#notificationList").addEventListener("click", event => {
+    const item = event.target.closest("button[data-notification-id]");
+    if (!item) return;
+    openNotificationTarget(notificationItems().find(notification => notification.id === item.dataset.notificationId));
+  });
+  $("#notificationList").addEventListener("keydown", event => {
+    if (!['Enter', ' '].includes(event.key)) return;
+    const item = event.target.closest("button[data-notification-id]");
+    if (!item) return;
+    event.preventDefault();
+    openNotificationTarget(notificationItems().find(notification => notification.id === item.dataset.notificationId));
   });
   $("#markNotificationsRead").addEventListener("click", () => {
     const items = notificationItems();

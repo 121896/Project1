@@ -96,8 +96,14 @@
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  let themeTransitionTimer = null;
 
-  function applyTheme(darkMode) {
+  function applyTheme(darkMode, { animate = false } = {}) {
+    if (animate && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      clearTimeout(themeTransitionTimer);
+      document.documentElement.classList.add("theme-transition");
+      themeTransitionTimer = setTimeout(() => document.documentElement.classList.remove("theme-transition"), 320);
+    }
     document.body.classList.toggle("dark-mode", darkMode);
     localStorage.setItem(themeStorageKey, darkMode ? "dark" : "light");
     const themeButton = $("#themeMenuItem");
@@ -1930,7 +1936,7 @@
     if (!item) return;
     const action = item.dataset.userAction;
     if (action === "theme") {
-      applyTheme(!document.body.classList.contains("dark-mode"));
+      applyTheme(!document.body.classList.contains("dark-mode"), { animate: true });
       return;
     }
     closeUserMenu();

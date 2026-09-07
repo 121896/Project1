@@ -79,6 +79,10 @@
       outline-offset: 2px;
     }
     [hidden] { display: none !important; }
+    html.theme-transition, html.theme-transition * {
+      transition: background .28s ease, background-color .28s ease, color .24s ease,
+        border-color .28s ease, box-shadow .28s ease !important;
+    }
 
     .topbar {
       position: sticky;
@@ -357,7 +361,7 @@
       height: 150px;
       left: 48%;
       bottom: -95px;
-      background: rgba(237,206,126,.28);
+      background: rgba(174,205,164,.30);
     }
     .hero-copy, .hero-plan { position: relative; z-index: 1; }
     .eyebrow {
@@ -383,8 +387,8 @@
       line-height: 1.7;
     }
     .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-    .hero .button.primary { color: var(--navy); background: #f5d991; box-shadow: 0 10px 24px rgba(237,206,126,.22); }
-    .hero .button.primary:hover { background: #ffe6a5; }
+    .hero .button.primary { color: #173c2c; background: #a9cfb5; box-shadow: 0 10px 24px rgba(123,177,141,.24); }
+    .hero .button.primary:hover { background: #c0ddc8; }
     .hero .button.secondary { color: #fff; border-color: rgba(255,255,255,.25); background: rgba(255,255,255,.08); }
     .hero-plan {
       align-self: stretch;
@@ -611,10 +615,11 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      background: linear-gradient(115deg, var(--yellow-soft), #fffdf4);
+      border: 1px solid #c2d8c8;
+      background: linear-gradient(115deg, #dce9df, #f3f7f1);
     }
-    .quiz-callout strong { display: block; font-size: 14px; }
-    .quiz-callout p { margin: 5px 0 0; color: #7e6b36; font-size: 11px; }
+    .quiz-callout strong { display: block; color: #315b47; font-size: 14px; }
+    .quiz-callout p { margin: 5px 0 0; color: #5f7c6b; font-size: 11px; }
     .quiz-launch-actions { display: flex; align-items: flex-start; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 
     .profile-summary {
@@ -973,6 +978,13 @@
     body.dark-mode .admin-table th { background: #1b3025; }
     body.dark-mode .modal-backdrop { background: rgba(0,0,0,.62); }
     body.dark-mode .theme-switch { background: #4b5d51; }
+    body.dark-mode .quiz-callout { border-color: #426b52; background: linear-gradient(115deg, #1c3327, #253b2e); }
+    body.dark-mode .quiz-callout strong { color: #d9efe0; }
+    body.dark-mode .quiz-callout p { color: #aac5b2; }
+
+    @media (prefers-reduced-motion: reduce) {
+      html.theme-transition, html.theme-transition * { transition: none !important; }
+    }
 
     @media (max-width: 900px) {
       .hero { grid-template-columns: 1fr; }

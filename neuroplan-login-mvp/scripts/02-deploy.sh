@@ -41,9 +41,19 @@ kubectl -n "$NAMESPACE" get secret neuroplan-auth-secrets >/dev/null 2>&1 || {
   echo "Run scripts/00-create-db-secret.sh first." >&2
   exit 2
 }
-kubectl -n "$NAMESPACE" get secret neuroplan-llm-secrets >/dev/null 2>&1 || {
-  echo "[FAIL] secret ${NAMESPACE}/neuroplan-llm-secrets not found" >&2
-  echo "Create LLM_ACCOUNT_ID and LLM_API_KEY as described in README.md." >&2
+kubectl -n "$NAMESPACE" get secret neuroplan-gemini-secrets >/dev/null 2>&1 || {
+  echo "[FAIL] secret ${NAMESPACE}/neuroplan-gemini-secrets not found" >&2
+  echo "Create GEMINI_API_KEY as described in README.md." >&2
+  exit 2
+}
+kubectl -n "$NAMESPACE" get secret harbor-pull-secret >/dev/null 2>&1 || {
+  echo "[FAIL] secret ${NAMESPACE}/harbor-pull-secret not found" >&2
+  echo "Create the pull-only Harbor credential for robot\$k8s-pull before deploying." >&2
+  exit 2
+}
+PULL_SECRET_TYPE="$(kubectl -n "$NAMESPACE" get secret harbor-pull-secret -o jsonpath='{.type}')"
+[[ "$PULL_SECRET_TYPE" == "kubernetes.io/dockerconfigjson" ]] || {
+  echo "[FAIL] ${NAMESPACE}/harbor-pull-secret must be type kubernetes.io/dockerconfigjson" >&2
   exit 2
 }
 kubectl -n "$NAMESPACE" get gateway neuroplan-gateway >/dev/null

@@ -38,6 +38,24 @@ done
 echo "===== Kubernetes ====="
 kubectl -n "$NAMESPACE" get pods \
   -l app.kubernetes.io/part-of=neuroplan-login-mvp -o wide
+
+AI_PROVIDER="$(kubectl -n "$NAMESPACE" get configmap neuroplan-backend-config \
+  -o jsonpath='{.data.LLM_PROVIDER}')"
+GEMINI_MODEL="$(kubectl -n "$NAMESPACE" get configmap neuroplan-backend-config \
+  -o jsonpath='{.data.GEMINI_MODEL}')"
+[[ "$AI_PROVIDER" == "GEMINI" ]] || \
+  { echo "[FAIL] expected LLM_PROVIDER=GEMINI, got $AI_PROVIDER" >&2; exit 9; }
+[[ -n "$GEMINI_MODEL" ]] || \
+  { echo "[FAIL] GEMINI_MODEL is empty" >&2; exit 9; }
+kubectl -n "$NAMESPACE" get secret neuroplan-gemini-secrets >/dev/null
+kubectl -n "$NAMESPACE" get secret harbor-pull-secret >/dev/null
+PULL_SECRET_TYPE="$(kubectl -n "$NAMESPACE" get secret harbor-pull-secret -o jsonpath='{.type}')"
+[[ "$PULL_SECRET_TYPE" == "kubernetes.io/dockerconfigjson" ]] || {
+  echo "[FAIL] harbor-pull-secret has unexpected type: $PULL_SECRET_TYPE" >&2
+  exit 9
+}
+echo "[PASS] Gemini provider=$AI_PROVIDER model=$GEMINI_MODEL secrets=neuroplan-gemini-secrets,harbor-pull-secret"
+
 for app in neuroplan-frontend neuroplan-backend; do
   pod="$(kubectl -n "$NAMESPACE" get pod \
     -l "app.kubernetes.io/name=$app" \
@@ -83,8 +101,8 @@ cp -- "$RELOAD_COOKIE_JAR" "$COOKIE_JAR"
 echo "===== AI quota / consent ====="
 AI_REMAINING_BEFORE="$(curl_request -ksS --fail -b "$COOKIE_JAR" \
   "$BASE_URL/api/ai/quota" | jq -er '.remainingToday')"
-[[ "$AI_REMAINING_BEFORE" -eq 20000 ]] || \
-  { echo "[FAIL] expected initial AI quota 20000, got $AI_REMAINING_BEFORE" >&2; exit 6; }
+[[ "$AI_REMAINING_BEFORE" -eq 30000 ]] || \
+  { echo "[FAIL] expected initial AI quota 30000, got $AI_REMAINING_BEFORE" >&2; exit 6; }
 curl_request -ksS --fail -b "$COOKIE_JAR" \
   -X PUT -H 'Content-Type: application/json' \
   -d '{"enabled":true,"consent":true,"explanationStyle":"PRACTICAL","availableMinutes":30}' \
@@ -155,9 +173,10 @@ curl_request -ksS --fail -b "$COOKIE_JAR" "$BASE_URL/api/learning/plans/history?
 
 echo "===== AI wrong feedback / recommendation / remaining tokens ====="
 curl_request -ksS --fail -b "$COOKIE_JAR" -X POST \
-  "$BASE_URL/api/ai/questions?subjectCode=LINUX&count=3" | tee "$AI_QUIZ_FILE" | jq -e \
-  '.generationRunId > 0 and .fallback == false and (.questions | length) == 3 and all(.questions[]; (.options | length) == 4)'
+  "$BASE_URL/api/ai/questions?subjectCode=LINUX" | tee "$AI_QUIZ_FILE" | jq -e \
+  '.generationRunId > 0 and .fallback == false and (.questions | length) == 5 and all(.questions[]; (.options | length) == 4)'
 AI_QUIZ_RUN_ID="$(jq -er '.generationRunId' "$AI_QUIZ_FILE")"
+AI_QUIZ_QUESTION_ID="$(jq -er '.questions[0].id' "$AI_QUIZ_FILE")"
 AI_QUIZ_QUESTION_NO="$(jq -er '.questions[0].questionNo' "$AI_QUIZ_FILE")"
 AI_QUIZ_OPTION_NO="$(jq -er '.questions[0].options[0].optionNo' "$AI_QUIZ_FILE")"
 curl_request -ksS --fail -b "$COOKIE_JAR" \
@@ -166,6 +185,23 @@ curl_request -ksS --fail -b "$COOKIE_JAR" \
       '{questionNo:$questionNo,selectedOptionNo:$selectedOptionNo}')" \
   "$BASE_URL/api/ai/questions/${AI_QUIZ_RUN_ID}/check" | jq -e \
   '(.correct | type) == "boolean" and (.correctOptionNo >= 1 and .correctOptionNo <= 4) and (.explanation | length) > 0'
+AI_QUIZ_CORRECT_OPTION_NO="$(curl_request -ksS --fail -b "$COOKIE_JAR" \
+  -X POST -H 'Content-Type: application/json' \
+  -d "$(jq -nc --argjson questionNo "$AI_QUIZ_QUESTION_NO" --argjson selectedOptionNo "$AI_QUIZ_OPTION_NO" \
+      '{questionNo:$questionNo,selectedOptionNo:$selectedOptionNo}')" \
+  "$BASE_URL/api/ai/questions/${AI_QUIZ_RUN_ID}/check" | jq -er '.correctOptionNo')"
+AI_QUIZ_WRONG_OPTION_ID="$(jq -er --argjson correct "$AI_QUIZ_CORRECT_OPTION_NO" \
+  '.questions[0].options[] | select(.optionNo != $correct) | .id' "$AI_QUIZ_FILE" | head -1)"
+AI_ATTEMPT_BODY="$(jq -c --argjson firstQuestion "$AI_QUIZ_QUESTION_ID" --argjson wrongOption "$AI_QUIZ_WRONG_OPTION_ID" \
+  '{subjectCode:"LINUX",answers:[.questions[] | {questionId:.id,selectedOptionId:(if .id == $firstQuestion then $wrongOption else .options[0].id end)}]}' \
+  "$AI_QUIZ_FILE")"
+curl_request -ksS --fail -b "$COOKIE_JAR" \
+  -X POST -H 'Content-Type: application/json' \
+  -d "$AI_ATTEMPT_BODY" \
+  "$BASE_URL/api/learning/diagnosis/attempts" | jq -e \
+  '.totalQuestions == 5 and (.results | length) == 5'
+curl_request -ksS --fail -b "$COOKIE_JAR" "$BASE_URL/api/learning/wrong-notes" | jq -e \
+  --argjson questionId "$AI_QUIZ_QUESTION_ID" 'any(.[]; .questionId == $questionId)'
 WRONG_QUESTION_ID="$(curl_request -ksS --fail -b "$COOKIE_JAR" \
   "$BASE_URL/api/learning/wrong-notes" | jq -er 'map(select(.relearned == false))[0].questionId')"
 curl_request -ksS --fail -b "$COOKIE_JAR" -X POST \

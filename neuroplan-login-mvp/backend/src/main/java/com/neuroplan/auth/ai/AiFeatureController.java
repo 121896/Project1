@@ -35,11 +35,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Controller
 @ResponseBody
 @RequestMapping("/api/ai")
 public class AiFeatureController {
+    private static final Logger log = LoggerFactory.getLogger(AiFeatureController.class);
     private final JdbcTemplate jdbcTemplate;
     private final CurrentUserService currentUserService;
     private final AiQuotaService quotaService;
@@ -99,20 +102,17 @@ public class AiFeatureController {
     @PostMapping("/questions")
     public AiQuizResponse generateQuestions(
             @RequestParam String subjectCode,
-            @RequestParam(defaultValue = "3") int count,
             HttpServletRequest request
     ) {
         UserRecord user = currentUserService.require(request);
         ProfileSubject focus = profileSubject(user.id(), subjectCode);
         QuizGeneration generated = generationService.generateQuiz(
-                user.id(), focus.subjectId(), focus.subjectName(), focus.levelLabel(), count);
-        List<AiQuizQuestionResponse> questions = generated.content().questions().stream()
-                .map(question -> new AiQuizQuestionResponse(
-                        question.questionNo(), question.subjectName(), question.difficulty(), question.text(),
-                        question.options().stream()
-                                .map(option -> new AiQuizOptionResponse(option.optionNo(), option.text()))
-                                .toList()
-                )).toList();
+                user.id(), focus.subjectId(), focus.subjectName(), focus.levelLabel());
+        // AI 문제에도 실제 문제/보기 ID를 부여한다. 따라서 풀이 결과를 기존
+        // diagnosis_attempts와 wrong_notes 흐름으로 그대로 기록할 수 있다.
+        List<AiQuizQuestionResponse> questions = persistAiResult(
+                user.id(), generated.generationRunId(), "AI 문제 저장 실패 환불",
+                () -> saveQuizQuestions(focus, generated));
         return new AiQuizResponse(generated.generationRunId(), generated.fallback(), questions, generated.quota());
     }
 
@@ -248,6 +248,8 @@ public class AiFeatureController {
             if (result == null) throw new IllegalStateException("AI 결과를 저장하지 못했습니다.");
             return result;
         } catch (RuntimeException persistenceFailure) {
+            log.error("AI persistence failed: runId={}, userId={}, reason={}",
+                    generationRunId, userId, refundReason, persistenceFailure);
             try {
                 generationService.markPersistenceFailure(generationRunId, refundReason);
             } catch (RuntimeException statusFailure) {
@@ -258,8 +260,67 @@ public class AiFeatureController {
             } catch (RuntimeException refundFailure) {
                 persistenceFailure.addSuppressed(refundFailure);
             }
-            throw persistenceFailure;
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "AI 결과를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요. (실행 번호: "
+                            + generationRunId + ")");
         }
+    }
+
+    private List<AiQuizQuestionResponse> saveQuizQuestions(ProfileSubject focus, QuizGeneration generated) {
+        Integer highestQuestionNo = jdbcTemplate.query("""
+                SELECT question_no
+                  FROM diagnosis_questions
+                 WHERE subject_id = ?
+                 ORDER BY question_no DESC
+                 LIMIT 1
+                 FOR UPDATE
+                """, (rs, rowNum) -> rs.getInt("question_no"), focus.subjectId())
+                .stream().findFirst().orElse(0);
+        int[] nextQuestionNo = { highestQuestionNo == null ? 1 : highestQuestionNo + 1 };
+        return generated.content().questions().stream().map(question -> {
+            GeneratedKeyHolder keys = new GeneratedKeyHolder();
+            jdbcTemplate.update(connection -> {
+                PreparedStatement statement = connection.prepareStatement("""
+                        INSERT INTO diagnosis_questions (
+                            subject_id, question_no, difficulty, question_text, explanation,
+                            is_active, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
+                        """, Statement.RETURN_GENERATED_KEYS);
+                statement.setLong(1, focus.subjectId());
+                statement.setInt(2, nextQuestionNo[0]++);
+                statement.setString(3, difficultyCode(question.difficulty()));
+                statement.setString(4, question.text());
+                statement.setString(5, question.explanation());
+                return statement;
+            }, keys);
+            if (keys.getKey() == null) throw new IllegalStateException("AI 문제 번호를 생성하지 못했습니다.");
+            long questionId = keys.getKey().longValue();
+            List<AiQuizOptionResponse> options = question.options().stream().map(option -> {
+                GeneratedKeyHolder optionKeys = new GeneratedKeyHolder();
+                jdbcTemplate.update(connection -> {
+                    PreparedStatement statement = connection.prepareStatement("""
+                            INSERT INTO question_options (question_id, option_no, option_text, is_correct)
+                            VALUES (?, ?, ?, ?)
+                            """, Statement.RETURN_GENERATED_KEYS);
+                    statement.setLong(1, questionId);
+                    statement.setInt(2, option.optionNo());
+                    statement.setString(3, option.text());
+                    statement.setBoolean(4, option.correct());
+                    return statement;
+                }, optionKeys);
+                if (optionKeys.getKey() == null) throw new IllegalStateException("AI 보기 번호를 생성하지 못했습니다.");
+                return new AiQuizOptionResponse(optionKeys.getKey().longValue(), option.optionNo(), option.text());
+            }).toList();
+            return new AiQuizQuestionResponse(questionId, question.questionNo(), question.subjectName(),
+                    question.difficulty(), question.text(), options);
+        }).toList();
+    }
+
+    private String difficultyCode(String value) {
+        String normalized = value == null ? "" : value.trim().toUpperCase(java.util.Locale.ROOT);
+        if (normalized.contains("ADVANCED") || normalized.contains("고급")) return "ADVANCED";
+        if (normalized.contains("INTERMEDIATE") || normalized.contains("중급")) return "INTERMEDIATE";
+        return "BEGINNER";
     }
 
     private PlanResponse plan(long planId, long userId) {
@@ -403,8 +464,8 @@ public class AiFeatureController {
                                String subjectName, List<PlanStepResponse> steps) {}
     public record AiPlanResponse(PlanResponse plan, long generationRunId, boolean fallback,
                                  String rationale, AiQuotaResponse quota) {}
-    public record AiQuizOptionResponse(int optionNo, String text) {}
-    public record AiQuizQuestionResponse(int questionNo, String subjectName, String difficulty,
+    public record AiQuizOptionResponse(long id, int optionNo, String text) {}
+    public record AiQuizQuestionResponse(long id, int questionNo, String subjectName, String difficulty,
                                          String text, List<AiQuizOptionResponse> options) {}
     public record AiQuizResponse(long generationRunId, boolean fallback,
                                  List<AiQuizQuestionResponse> questions, AiQuotaResponse quota) {}

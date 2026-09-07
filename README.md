@@ -1,5 +1,11 @@
 # NeuroPlan 학습 MVP 0.8.0
 
+## 최근 변경
+
+- 외부 LLM을 Google Gemini API `gemini-3.5-flash-lite`로 교체하고 기능별 JSON Schema 구조화 출력을 적용했습니다.
+- Backend에 `/actuator/prometheus`를 노출하고 `http.server.requests` 요청 지연시간 histogram 및 50/95/99 백분위 지표를 제공합니다.
+- AI 플랜 설명 방식별 프롬프트를 분리하고, AI 문제를 기존 문제은행·답안·오답노트 흐름에 저장하도록 보강했습니다.
+
 > 릴리스 상태: 0.8.0 릴리스 후보 — 로컬 정적·반응형 검증 후 On-Prem 통합 테스트 예정 (2026-09-01)
 
 회원가입부터 과목·수준 설정, 오늘 플랜, 3단계 완료, 5문제 진단, 오답·일별 통계까지 MariaDB에 저장하는 최소 학습 서비스입니다. On-Prem Kubernetes에서 먼저 실행한 뒤 ROSA/OpenShift로 옮길 수 있도록 Workload와 진입 리소스를 분리했습니다.
@@ -14,8 +20,8 @@ Client
             └─ /api/*  → Spring Boot API (2 replicas)
                               ├─ MaxScale 192.168.44.21:4006
                               │    └─ MariaDB infraready 인증·학습·AI 테이블 19개
-                              └─ Cloudflare Workers AI
-                                   └─ @cf/qwen/qwen3.8-27b
+                              └─ Google Gemini API
+                                   └─ gemini-3.5-flash-lite
 ```
 
 - Frontend: 정적 HTML/JavaScript, API와 동일 Origin
@@ -38,7 +44,7 @@ Client
 | 오답 누적·재학습 완료·상세 대시보드 | `wrong_notes`, `study_daily_stats`, `diagnosis_attempts` 집계 |
 | 관리자 요약·회원 상태·영구 삭제 | 사용자와 연결된 인증·학습·AI 테이블 전체 |
 | AI 학습 플랜 생성 | `ai_generation_runs`, `daily_plan_ai_meta`, `daily_plans`, `plan_steps` |
-| AI 확인 문제 생성·서버 채점 | `ai_generation_runs`, `ai_token_quotas`, `ai_token_ledger` |
+| AI 확인 문제 생성·제출 답안·오답 노트 | `ai_generation_runs`, `ai_token_quotas`, `ai_token_ledger`, `diagnosis_questions`, `question_options`, `diagnosis_attempts`, `diagnosis_answers`, `wrong_notes` |
 | 오답 AI 해설 | `ai_generation_runs`, `wrong_note_ai_feedback`, `wrong_notes` |
 | 개인 맞춤 재학습 추천 | `ai_generation_runs`, `next_plan_queue`, `user_ai_preferences` |
 | AI 동의·설명 스타일·잔여 토큰 | `user_ai_preferences`, `ai_token_quotas`, `ai_token_ledger` |
@@ -55,14 +61,15 @@ Client
 
 ## 0.8.0 변경 사항
 
-- **AI 학습 플랜:** 선택 과목·수준·희망 학습 시간을 Cloudflare Workers AI에 전달하고 검증된 3단계 JSON을 오늘 플랜으로 저장합니다.
+- **AI 학습 플랜:** 선택 과목·수준·희망 학습 시간을 Google Gemini API에 전달하고 JSON Schema로 검증된 3단계 결과를 오늘 플랜으로 저장합니다.
 - **오답 AI 해설:** 오답 문제의 선택 답안·정답·기존 해설을 바탕으로 맞춤 피드백과 다음 행동을 생성해 별도 이력으로 보관합니다.
 - **개인 맞춤 재학습 추천:** 과목별 오답과 학습 통계를 바탕으로 다음 학습 항목을 생성해 대기열에 저장합니다.
-- **잔여 토큰:** 사용자별 기본 일일 한도 20,000 토큰과 사용량·잔여량을 화면에 표시하고 외부 호출 성공 시 원장에 토큰 사용량을 기록합니다.
-- **AI 문제 출제:** 선택한 과목·수준에 맞춘 객관식 3문제를 생성하고 정답을 노출하지 않은 채 생성 기록을 기준으로 서버에서 채점합니다.
-- **AI 생성 안정화:** Qwen Thinking을 비활성화해 JSON 응답에 사용할 토큰과 처리 시간을 확보합니다. AI 문제는 3개, 전용 출력 한도는 2,200토큰으로 유지하며 `finish_reason=length` 응답은 `OUTPUT_LIMIT`으로 구분하고 사용 토큰을 반환합니다.
+- **잔여 토큰:** 사용자별 기본 일일 한도 30,000 토큰과 사용량·잔여량을 오른쪽 위 `오늘의 AI 토큰` 게이지에 표시하고 외부 호출 성공 시 원장에 토큰 사용량을 기록합니다.
+- **AI 문제 출제:** 선택한 과목·수준에 맞춘 객관식 5문제를 현재 문제 풀이 페이지에서 제출하며, 생성 문제를 기존 문제은행·통계·오답 노트 흐름으로 저장합니다.
+- **설명 방식 차별화:** 간결·상세·실습 중심 설정에 서로 다른 행동 수와 실행 지침을 적용합니다.
+- **AI 생성 안정화:** Gemini 구조화 출력으로 기능별 JSON Schema를 강제합니다. AI 문제는 5개, 전용 출력 한도는 1,600토큰이며 출력 한도·안전 차단·인증·요청 제한 오류를 구분하고 비정상 응답의 애플리케이션 토큰을 반환합니다.
 - **상단 토큰 게이지:** 오른쪽 위에 `잔여 / 일일 한도` 숫자와 색상 잔량 막대를 함께 표시합니다.
-- **기능별 평균 토큰:** 성공하고 환불되지 않은 실제 요청을 기준으로 AI 학습 플랜·AI 문제 생성·오답 노트 AI 해설·재학습 추천 버튼마다 `평균 약 N토큰`을 안내합니다.
+- **기능별 평균 토큰:** 현재 공급자의 성공하고 환불되지 않은 실제 요청을 기준으로 AI 학습 플랜·AI 문제 생성·오답 노트 AI 해설·재학습 추천 버튼마다 `평균 약 N토큰`을 안내합니다.
 - **28일 학습량:** 최근 28일의 문제 풀이 수와 완료 단계 수를 KST 날짜 기준 7열 × 4행 캘린더형 히트맵으로 표시합니다.
 - **플랜 생성 기준:** 선택 과목·수준, 희망 학습 시간, 설명 방식과 3단계 실습 구성을 플랜 화면에서 확인할 수 있습니다.
 - **페이지 상태·새로고침:** 현재 학습 탭을 URL에 보존해 브라우저 새로고침 후에도 같은 화면을 복원하고, 공통 새로고침 버튼으로 서버 데이터를 다시 불러오는 동안에만 중앙 로딩 화면을 표시합니다.
@@ -70,7 +77,7 @@ Client
 - **안내 메시지:** 우측 하단 작업 결과 메시지를 6초 동안 유지해 긴 안내도 확인할 수 있게 했습니다.
 - **플랜 가독성:** 생성 내용은 그대로 유지하면서 `1)`, `2)`, `3)` 실행 항목을 번호별 목록으로 나눠 표시합니다.
 - **새로고침 세션 복원:** HttpOnly Refresh Token으로 인증을 복원하며, 학습 데이터 일부 조회 실패가 전체 로그아웃으로 이어지지 않도록 분리했습니다.
-- **AI 개인정보 동의:** 최초 사용 전에 외부 AI 처리 동의, 설명 스타일, 희망 학습 시간을 저장하며 동의하지 않은 사용자는 AI API를 호출할 수 없습니다.
+- **AI 개인정보 동의:** 최초 사용 전에 외부 AI 처리 동의, 설명 스타일, 희망 학습 시간을 저장합니다. Gemini 전환 후에는 동의문 버전을 확인해 기존 사용자도 최초 1회 다시 동의해야 합니다.
 - **안전한 외부 호출:** API Key는 Kubernetes Secret에서만 주입하고, UTF-8 JSON 검증·시간 제한·오류 분류·정적 플랜 폴백을 적용합니다.
 - **프론트 정리:** 별도 `neuroplan-ui-mockup` 디렉터리를 제거하고 실제 HTML·JavaScript·아이콘을 `frontend/`에 통합했습니다.
 - **배포 검증:** Smoke Test에서 AI 동의, 폴백이 아닌 실제 플랜·문제 생성, 서버 채점, 오답 해설, 재학습 추천, 토큰 차감과 기능별 평균 집계를 연속 검증합니다.
@@ -79,13 +86,13 @@ Client
 
 | 구분 | 0.7.0 | 0.8.0 |
 |---|---|---|
-| 플랜 생성 | 애플리케이션의 고정 템플릿 | Cloudflare AI 3단계 플랜 + 검증 실패 시 정적 폴백 |
+| 플랜 생성 | 애플리케이션의 고정 템플릿 | Gemini 3단계 플랜 + JSON Schema 검증 + 실패 시 정적 폴백 |
 | 오답 노트 | 저장된 정답·해설 표시 | 사용자 답안 기반 AI 해설과 추천 행동 추가 |
 | 재학습 | 재학습 완료 상태 기록 | 오답·통계 기반 과목별 맞춤 재학습 추천 추가 |
-| 문제 출제 | DB 문제은행 5문제 | DB 문제은행 5문제 + 과목·수준별 AI 객관식 3문제와 서버 채점 |
+| 문제 출제 | DB 문제은행 5문제 | DB 문제은행 5문제 + 과목·수준별 AI 객관식 5문제와 서버 채점 |
 | 사용량 | AI 사용량 없음 | 일일 토큰 한도·사용량·잔여량, 기능별 성공 요청 평균과 호출 원장 제공 |
-| 개인정보 | AI 외부 전송 없음 | 최초 사용 시 별도 동의와 개인화 설정 저장 |
-| 운영 Secret | DB/JWT Secret | DB/JWT Secret + Cloudflare Account ID/API Token |
+| 개인정보 | AI 외부 전송 없음 | 최초 사용 및 외부 처리 업체 변경 시 별도 동의와 개인화 설정 저장 |
+| 운영 Secret | DB/JWT Secret | DB/JWT Secret + Gemini API Key + Harbor Pull Secret |
 
 ## 0.7.0 변경 사항
 
@@ -145,6 +152,7 @@ neuroplan-login-mvp/
 ├── k8s/
 │   ├── base/            환경 공통 Deployment, Service, ConfigMap, PDB
 │   ├── onprem/          현재 NGF HTTPRoute
+│   ├── monitoring/      Longhorn Manager 메트릭 NetworkPolicy (별도 적용)
 │   └── rosa/            향후 OpenShift Route 오버레이
 └── scripts/             Secret, build/push, deploy, smoke test
 ```
@@ -207,7 +215,42 @@ DB/네트워크 담당 확인사항:
 - Worker Data IP `192.168.44.41~43`에서 MaxScale TCP/4006 허용
 - MaxScale 사용자 캐시 또는 권한 갱신 완료
 
+Gemini 전환에 필요한 DB 정보는 기존 AI 테이블로 충족됩니다. `ai_generation_runs.provider`에 `GEMINI`, `ai_token_ledger.provider_usage_unit`에 `TOKENS`가 허용되어 있어야 하며 별도 Gemini 테이블이나 API 키 컬럼은 만들지 않습니다. 아래 명령으로 DB 담당자가 실제 제약 조건과 최근 실행 이력을 확인할 수 있습니다.
+
+```bash
+mariadb --no-defaults --disable-ssl \
+  --protocol=TCP \
+  -h 192.168.44.21 \
+  -P 4006 \
+  -u ir_app \
+  -p \
+  infraready
+```
+
+```sql
+SHOW CREATE TABLE ai_generation_runs\G
+SHOW CREATE TABLE ai_token_ledger\G
+
+SELECT id, request_type, provider, model_name, prompt_version,
+       generation_status, error_code, http_status,
+       input_tokens, output_tokens, provider_usage_units,
+       provider_usage_unit, created_at, completed_at
+  FROM ai_generation_runs
+ ORDER BY id DESC
+ LIMIT 10;
+
+SELECT generation_run_id, entry_type, token_delta,
+       provider_usage_units, provider_usage_unit, description, created_at
+  FROM ai_token_ledger
+ ORDER BY id DESC
+ LIMIT 20;
+```
+
+`ir_app`에 DDL 권한이 없다면 제약 조건 변경은 DBA 계정으로만 수행합니다. 기존 `NEURONS` 이력은 유지하고 `TOKENS`만 추가 허용하면 됩니다.
+
 ## 2. DevOps VM 파일 배치
+
+`neuroplan-login-mvp-0.8.0-bundle.zip`은 소스에서 생성되는 배포 산출물입니다. 소스 변경 후에는 반드시 현재 `neuroplan-login-mvp/` 디렉터리로 번들을 다시 만들고, 이전 번들을 사용하지 않습니다. 특히 Gemini 전환·Harbor 이미지·Longhorn 정책 변경은 번들에 포함되어야 합니다.
 
 서비스에 필요한 소스는 하나의 디렉터리에 함께 둡니다.
 
@@ -229,12 +272,18 @@ cd ~/onprem-k8s
 ./neuroplan-login-mvp/scripts/01-build-push.sh
 ```
 
-이미지:
+이미지(Harbor 외부 Registry):
 
 ```text
-192.168.34.21:5000/neuroplan/frontend:0.8.0
-192.168.34.21:5000/neuroplan/backend:0.8.0
+harbor.nplan.local:80/neuroplan/frontend:0.8.0
+harbor.nplan.local:80/neuroplan/backend:0.8.0
 ```
+
+Jenkins는 `robot$jenkins` Credential(`harbor-registry`)로 Harbor에 Push하고, Main Kubernetes와 DR k3s는 `application/harbor-pull-secret`에 저장된 `robot$k8s-pull` Pull-only 자격 증명으로 이미지를 가져옵니다. Deployment의 `imagePullSecrets`는 이 Secret을 가리키며, ID·비밀번호를 매니페스트에 기록하지 않습니다. Harbor는 `harbor.nplan.local:80`의 HTTP Registry이므로 노드의 containerd 및 k3s insecure-registry 설정이 선행되어야 합니다.
+
+DevOps VM에서 빌드 스크립트를 수동 실행할 때는 Jenkins Credential을 직접 입력하지 말고, Ansible Vault에서 발급한 자격 증명으로 먼저 `podman login harbor.nplan.local:80`을 실행하거나 `REGISTRY_AUTH_FILE`을 지정합니다.
+
+현재 앱 매니페스트의 Frontend/Backend 이미지는 Harbor 경로로 통일되었습니다. 다만 Gateway 이미지, validation용 `busybox`·`curl`, Frontend 빌드의 Nginx 베이스 이미지는 아직 `192.168.34.21:5000`을 참조합니다. 해당 이미지가 Harbor `neuroplan` Project에 실제 Push된 것을 확인하기 전에는 Local Registry를 종료하지 않습니다.
 
 이미지는 기본 UID 1001을 선언하지만 Pod YAML에는 UID/GID를 고정하지 않습니다. Kubernetes에서는 비-root로 실행되고 ROSA에서는 SCC가 할당한 임의 UID로 실행됩니다.
 
@@ -258,22 +307,26 @@ application/neuroplan-auth-secrets
 
 재실행하면 JWT 키도 바뀌어 기존 로그인이 모두 무효화됩니다. 일반 배포 때는 재실행하지 않고 키 교체 작업으로만 사용합니다.
 
-Cloudflare Account ID와 API Token은 별도의 Secret으로 생성합니다. 실제 값은 명령 기록이나 YAML에 남기지 말고 프롬프트에서 입력합니다.
+Gemini API Key는 별도의 Secret으로 생성합니다. 실제 값은 명령 기록이나 YAML에 남기지 말고 프롬프트에서 입력합니다.
 
 ```bash
-read -r -p "Cloudflare Account ID: " LLM_ACCOUNT_ID
-read -r -s -p "Cloudflare API Token: " LLM_API_KEY
+read -r -s -p "Gemini API Key: " GEMINI_API_KEY
 echo
 
-kubectl -n application create secret generic neuroplan-llm-secrets \
-  --from-literal=LLM_ACCOUNT_ID="$LLM_ACCOUNT_ID" \
-  --from-literal=LLM_API_KEY="$LLM_API_KEY" \
+kubectl -n application create secret generic neuroplan-gemini-secrets \
+  --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-unset LLM_ACCOUNT_ID LLM_API_KEY
+unset GEMINI_API_KEY
 ```
 
-`neuroplan-llm-secrets`에는 `LLM_ACCOUNT_ID`, `LLM_API_KEY` 두 키가 있어야 합니다. Secret 값은 로그, Git, ConfigMap, 이미지에 저장하지 않습니다.
+`neuroplan-gemini-secrets`에는 `GEMINI_API_KEY`가 있어야 합니다. Secret 값은 로그, Git, ConfigMap, 이미지에 저장하지 않습니다. Gemini 전환 배포와 Smoke Test가 성공한 뒤에는 더 이상 참조되지 않는 기존 Cloudflare Secret을 삭제할 수 있습니다.
+
+```bash
+kubectl -n application delete secret neuroplan-llm-secrets --ignore-not-found
+```
+
+현재 애플리케이션 매니페스트와 릴리스 스크립트는 `neuroplan-llm-secrets`를 참조하지 않습니다. 삭제 전 `kubectl -n application get deployment neuroplan-backend -o jsonpath='{.spec.template.spec.containers[0].envFrom}'`로 실제 배포가 Gemini Secret만 사용하는지 확인합니다.
 
 관리자 페이지는 `k8s/base/10-workloads.yaml`의 `ADMIN_EMAILS` 허용 목록으로 제한합니다. 기본 테스트 값은 `admin@nplan.local`이며, 해당 이메일로 회원가입/로그인하면 오른쪽 위 사용자 메뉴에 **관리자 페이지**가 표시됩니다. 팀 승인 이메일이 다르면 배포 전에 쉼표 구분 목록으로 교체합니다.
 
@@ -298,7 +351,18 @@ kubectl -n application get pod,svc,pdb,httproute \
 kubectl -n application logs deployment/neuroplan-backend --tail=200
 ```
 
-## 6. 인증·학습·Rootless 자동 검증
+## 6. 모니터링·Longhorn 메트릭 접근
+
+Prometheus가 Longhorn Manager의 TCP/9500 메트릭만 수집하도록 최소 권한 정책을 별도로 제공합니다. 정책은 `longhorn-system` Namespace에 적용되며 `monitoring` Namespace의 `app.kubernetes.io/name=prometheus` Pod만 허용합니다.
+
+```bash
+kubectl apply -f neuroplan-login-mvp/k8s/monitoring/longhorn-prometheus-networkpolicy.yaml
+kubectl -n longhorn-system describe networkpolicy allow-prometheus-to-longhorn-manager-metrics
+```
+
+Prometheus ServiceMonitor/PodMonitor의 target은 `longhorn-backend.longhorn-system.svc:9500/metrics`로 유지합니다. NetworkPolicy 적용 뒤 Prometheus target이 `UP`인지 확인합니다. 이 정책은 Longhorn Manager 자체의 기존 정책과 함께 적용되므로 기존 허용 규칙을 삭제하지 않습니다.
+
+## 7. 인증·학습·Rootless 자동 검증
 
 테스트 회원 1명을 실제로 생성합니다.
 
@@ -326,7 +390,7 @@ DevOps VM에서는 DMZ Service VIP로 직접 라우팅되지 않으므로 스크
 
 브라우저에서는 `https://app.nplan.local`에 접속해 회원가입 → 로그아웃 → 재로그인을 확인합니다.
 
-## 7. DB에서 직접 확인
+## 8. DB에서 직접 확인
 
 ```sql
 USE infraready;
@@ -426,8 +490,8 @@ NAMESPACE=neuroplan KUBE_CLI=oc ./scripts/00-create-db-secret.sh
 
 cd k8s/rosa
 kustomize edit set image \
-  192.168.34.21:5000/neuroplan/frontend:0.8.0=quay.io/ORG/neuroplan-frontend:0.8.0 \
-  192.168.34.21:5000/neuroplan/backend:0.8.0=quay.io/ORG/neuroplan-backend:0.8.0
+  harbor.nplan.local:80/neuroplan/frontend:0.8.0=quay.io/ORG/neuroplan-frontend:0.8.0 \
+  harbor.nplan.local:80/neuroplan/backend:0.8.0=quay.io/ORG/neuroplan-backend:0.8.0
 oc apply -k .
 ```
 

@@ -38,17 +38,16 @@ app:
     emails: ${ADMIN_EMAILS:}
   ai:
     enabled: ${LLM_ENABLED:true}
-    provider: ${LLM_PROVIDER:CLOUDFLARE}
-    base-url: ${LLM_BASE_URL:https://api.cloudflare.com/client/v4}
-    account-id: ${LLM_ACCOUNT_ID:}
-    api-key: ${LLM_API_KEY:}
-    model: ${LLM_MODEL:@cf/qwen/qwen3.8-27b}
-    prompt-version: ${LLM_PROMPT_VERSION:neuroplan-0.8.0-v2}
+    provider: ${LLM_PROVIDER:GEMINI}
+    base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-3.5-flash-lite}
+    prompt-version: ${LLM_PROMPT_VERSION:neuroplan-0.8.0-gemini-v2}
     max-completion-tokens: ${LLM_MAX_COMPLETION_TOKENS:1200}
-    quiz-max-completion-tokens: ${LLM_QUIZ_MAX_COMPLETION_TOKENS:2200}
-    daily-token-limit: ${LLM_DAILY_TOKEN_LIMIT:20000}
-    connect-timeout-seconds: ${LLM_CONNECT_TIMEOUT_SECONDS:5}
-    read-timeout-seconds: ${LLM_READ_TIMEOUT_SECONDS:90}
+    quiz-max-completion-tokens: ${LLM_QUIZ_MAX_COMPLETION_TOKENS:1600}
+    daily-token-limit: ${LLM_DAILY_TOKEN_LIMIT:30000}
+    connect-timeout-seconds: ${GEMINI_CONNECT_TIMEOUT_SECONDS:5}
+    read-timeout-seconds: ${GEMINI_READ_TIMEOUT_SECONDS:60}
 
 management:
   endpoints:

@@ -54,12 +54,12 @@ grep -Fq '<version>0.8.0</version>' "$MVP_SOURCE/backend/pom.xml" || \
   fail "backend version is not 0.8.0"
 grep -Fq 'VERSION="${VERSION:-0.8.0}"' "$MVP_SOURCE/scripts/01-build-push.sh" || \
   fail "build script version is not 0.8.0"
-grep -Fq '192.168.34.21:5000/neuroplan/frontend:0.8.0' \
-  "$MVP_SOURCE/k8s/base/10-workloads.yaml" || fail "frontend image tag is not 0.8.0"
-grep -Fq '192.168.34.21:5000/neuroplan/backend:0.8.0' \
-  "$MVP_SOURCE/k8s/base/10-workloads.yaml" || fail "backend image tag is not 0.8.0"
-grep -Fq 'name: neuroplan-llm-secrets' "$MVP_SOURCE/k8s/base/10-workloads.yaml" || \
-  fail "LLM secret reference is missing"
+grep -Fq 'image: harbor.nplan.local:80/neuroplan/frontend' \
+  "$MVP_SOURCE/k8s/base/10-workloads.yaml" || fail "Harbor frontend image is missing"
+grep -Fq 'image: harbor.nplan.local:80/neuroplan/backend' \
+  "$MVP_SOURCE/k8s/base/10-workloads.yaml" || fail "Harbor backend image is missing"
+grep -Fq 'name: neuroplan-gemini-secrets' "$MVP_SOURCE/k8s/base/10-workloads.yaml" || \
+  fail "Gemini secret reference is missing"
 grep -Fq '/api/ai/plans' "$MVP_SOURCE/scripts/03-smoke-test.sh" || \
   fail "AI smoke test is missing"
 grep -Fq '/api/ai/questions' "$MVP_SOURCE/scripts/03-smoke-test.sh" || \
@@ -90,8 +90,10 @@ export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
 
 kubectl -n "$NAMESPACE" get secret neuroplan-auth-secrets >/dev/null 2>&1 || \
   fail "Secret $NAMESPACE/neuroplan-auth-secrets is missing. Run scripts/00-create-db-secret.sh first."
-kubectl -n "$NAMESPACE" get secret neuroplan-llm-secrets >/dev/null 2>&1 || \
-  fail "Secret $NAMESPACE/neuroplan-llm-secrets is missing. Create LLM_ACCOUNT_ID and LLM_API_KEY first."
+kubectl -n "$NAMESPACE" get secret neuroplan-gemini-secrets >/dev/null 2>&1 || \
+  fail "Secret $NAMESPACE/neuroplan-gemini-secrets is missing. Create GEMINI_API_KEY first."
+kubectl -n "$NAMESPACE" get secret harbor-pull-secret >/dev/null 2>&1 || \
+  fail "Secret $NAMESPACE/harbor-pull-secret is missing. Create the Harbor robot pull credential first."
 
 echo "===== 4. Build and push rootless images ====="
 cd "$PROJECT_ROOT/neuroplan-login-mvp"

@@ -7,17 +7,16 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "app.ai")
 public class AiProperties {
     private boolean enabled = true;
-    private String provider = "CLOUDFLARE";
-    private String baseUrl = "https://api.cloudflare.com/client/v4";
-    private String accountId = "";
+    private String provider = "GEMINI";
+    private String baseUrl = "https://generativelanguage.googleapis.com/v1beta";
     private String apiKey = "";
-    private String model = "@cf/qwen/qwen3.8-27b";
-    private String promptVersion = "neuroplan-0.8.0-v2";
+    private String model = "gemini-3.5-flash-lite";
+    private String promptVersion = "neuroplan-0.8.0-gemini-v2";
     private int maxCompletionTokens = 1200;
-    private int quizMaxCompletionTokens = 2200;
-    private int dailyTokenLimit = 20000;
+    private int quizMaxCompletionTokens = 1600;
+    private int dailyTokenLimit = 30000;
     private int connectTimeoutSeconds = 5;
-    private int readTimeoutSeconds = 90;
+    private int readTimeoutSeconds = 60;
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -25,8 +24,6 @@ public class AiProperties {
     public void setProvider(String provider) { this.provider = provider; }
     public String getBaseUrl() { return baseUrl; }
     public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
-    public String getAccountId() { return accountId; }
-    public void setAccountId(String accountId) { this.accountId = accountId; }
     public String getApiKey() { return apiKey; }
     public void setApiKey(String apiKey) { this.apiKey = apiKey; }
     public String getModel() { return model; }
@@ -45,11 +42,13 @@ public class AiProperties {
     public void setReadTimeoutSeconds(int readTimeoutSeconds) { this.readTimeoutSeconds = readTimeoutSeconds; }
 
     public String endpoint() {
-        return baseUrl.replaceAll("/+$", "") + "/accounts/" + accountId + "/ai/run/" + model;
+        return baseUrl.replaceAll("/+$", "") + "/models/" + model + ":generateContent";
     }
 
     public boolean configured() {
-        return enabled && accountId != null && !accountId.isBlank()
+        return enabled
+                && baseUrl != null && !baseUrl.isBlank()
+                && model != null && !model.isBlank()
                 && apiKey != null && !apiKey.isBlank();
     }
 }

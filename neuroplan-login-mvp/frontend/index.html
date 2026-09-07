@@ -99,6 +99,20 @@
     .category-button.active { color: #315f4b; border-color: #bcd6c7; background: var(--teal-soft); }
     .page-refresh-button { flex: 0 0 auto; margin-left: auto; }
     [data-page-section][hidden] { display: none !important; }
+    [data-page-section].page-swipe-enter-right { animation: page-swipe-enter-right .28s ease-out both; }
+    [data-page-section].page-swipe-enter-left { animation: page-swipe-enter-left .28s ease-out both; }
+    @keyframes page-swipe-enter-right {
+      from { opacity: 0; transform: translateX(30px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes page-swipe-enter-left {
+      from { opacity: 0; transform: translateX(-30px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      [data-page-section].page-swipe-enter-right,
+      [data-page-section].page-swipe-enter-left { animation: none; }
+    }
     .user-chip {
       min-height: 42px;
       padding: 0 13px;
@@ -500,11 +514,11 @@
     .subject-tags { margin-top: 13px; display: flex; flex-wrap: wrap; gap: 7px; }
     .subject-tag { padding: 6px 9px; border-radius: 9px; color: var(--blue-dark); background: #fff; font-size: 11px; font-weight: 800; }
     .plan-criteria-card { margin-top: 12px; padding: 14px 15px; border: 1px solid #d3e5da; border-radius: 15px; background: #f7fbf8; }
-    .plan-criteria-card > strong { display: block; color: var(--navy); font-size: 11px; }
+    .plan-criteria-card > strong { display: block; color: var(--navy); font-size: 13px; }
     .plan-criteria-list { margin: 9px 0 0; padding: 0; display: grid; gap: 7px; list-style: none; }
-    .plan-criteria-list li { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+    .plan-criteria-list li { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 11px; line-height: 1.45; }
     .plan-criteria-list li span { flex: 0 0 auto; }
-    .plan-criteria-list li strong { color: #315f4c; text-align: right; overflow-wrap: anywhere; }
+    .plan-criteria-list li strong { min-width: 0; flex: 1 1 auto; color: #315f4c; text-align: right; word-break: keep-all; overflow-wrap: break-word; }
     .progress-list { margin: 20px 0 22px; display: grid; gap: 17px; }
     .profile-plan-button { position: static; flex: 0 0 auto; margin-top: 0; }
     .ai-quota-card { margin-top: 14px; padding: 14px; border: 1px solid #c8ddd0; border-radius: 15px; background: linear-gradient(135deg, #eff8f2, #f9fcfa); }
@@ -523,6 +537,8 @@
     .ai-recommendation-result { padding: 17px; border: 1px solid #c8ddd0; border-radius: 16px; background: #f4faf6; }
     .ai-recommendation-result strong { display: block; color: var(--navy); font-size: 14px; }
     .ai-recommendation-result p { margin: 8px 0 0; color: #315044; font-size: 12px; line-height: 1.7; }
+    .ai-recommendation-result .plan-step-intro { margin: 8px 0 0; }
+    .ai-recommendation-result .plan-step-actions { margin-top: 10px; }
     .ai-recommendation-meta { margin-top: 9px; color: var(--muted); font-size: 10px; }
     .ai-consent-note { margin: 0 0 16px; padding: 14px; border-radius: 14px; color: #315044; background: var(--sky-soft); font-size: 12px; line-height: 1.65; }
     .check-field { display: flex; align-items: flex-start; gap: 9px; margin: 4px 0 17px; color: #315044; font-size: 12px; line-height: 1.5; }
@@ -585,6 +601,10 @@
       font-size: 18px;
     }
     .modal-body { padding: 24px 25px 26px; }
+    .quiz-workspace { margin-top: 18px; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: var(--paper); box-shadow: 0 14px 34px rgba(47,86,72,.08); }
+    .quiz-workspace-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+    .quiz-workspace-head h3 { margin: 0; font-size: 20px; letter-spacing: -.04em; }
+    .quiz-workspace-head p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
     .field { margin-bottom: 15px; }
     .field label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 800; }
     .field input, .field select, .field textarea {
@@ -873,7 +893,7 @@
         <button class="button primary small" id="signupButton" type="button">회원가입</button>
         <button class="button ghost" id="loginButton" type="button">로그인</button>
         <span class="ai-token-chip" id="aiTokenChip" title="오늘 남은 AI 토큰" hidden>
-          <span class="ai-token-chip-label">AI 토큰 잔여</span><strong id="aiTokenChipValue">- / -</strong>
+          <span class="ai-token-chip-label">오늘의 AI 토큰</span><strong id="aiTokenChipValue">- / -</strong>
           <span class="ai-token-chip-track" role="progressbar" aria-label="오늘 남은 AI 토큰" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="확인할 수 없음"><span id="aiTokenChipBar"></span></span>
         </span>
         <div class="user-menu" id="userMenu" hidden>
@@ -1018,11 +1038,6 @@
             <li><span>결과 구성</span><strong>오늘의 3단계 실습</strong></li>
           </ul>
         </div>
-        <div class="ai-quota-card" id="aiQuotaCard" hidden>
-          <div class="ai-quota-top"><span>오늘의 AI 토큰</span><strong><span id="aiRemainingTokens">0</span> / <span id="aiDailyLimit">0</span></strong></div>
-          <div class="ai-quota-track" aria-label="AI 토큰 잔여량"><span id="aiQuotaBar" style="width:0%"></span></div>
-          <div class="ai-quota-foot"><span id="aiQuotaStatus">AI 기능 설정 전</span><button class="ai-link-button" id="aiSettingsButton" type="button">AI 설정</button></div>
-        </div>
         <div class="progress-list" id="subjectProgressList">
           <div class="subject-progress">
             <div class="subject-progress-top"><strong>학습 준비</strong><span id="setupProgressText">0%</span></div>
@@ -1088,6 +1103,22 @@
           </div>
         </div>
       </div>
+      <section class="quiz-workspace" id="quizWorkspace" hidden aria-live="polite" aria-labelledby="quizTitle">
+        <div class="quiz-workspace-head">
+          <div><h3 id="quizTitle">오늘의 확인 문제</h3><p id="quizSubjectText">학습한 핵심 내용을 확인합니다.</p></div>
+        </div>
+        <div class="quiz-progress">
+          <div class="quiz-progress-top"><span id="questionCounter">1 / 5</span><span>문제 진행률</span></div>
+          <div class="subject-track"><span id="quizProgressBar" style="width:20%"></span></div>
+        </div>
+        <div id="questionArea">
+          <span class="question-kicker" id="questionSubject">Kubernetes · 기본</span>
+          <h3 class="question-title" id="questionText"></h3>
+          <div class="answers" id="answerList"></div>
+          <div class="explanation" id="explanation" hidden></div>
+          <div class="quiz-footer"><button class="button primary" id="nextQuestion" type="button" disabled>답안 제출</button></div>
+        </div>
+      </section>
     </section>
 
     <section class="content-card wrong-note-card" data-page-section="wrong" hidden aria-labelledby="wrongNotesTitle">
@@ -1315,28 +1346,6 @@
     </section>
   </div>
 
-  <div class="modal-backdrop" id="quizModal" hidden>
-    <section class="modal large" role="dialog" aria-modal="true" aria-labelledby="quizTitle">
-      <div class="modal-head">
-        <div><h2 id="quizTitle">오늘의 확인 문제</h2><p id="quizSubjectText">학습한 핵심 내용을 확인합니다.</p></div>
-        <button class="close-button" type="button" data-close="quizModal" aria-label="닫기">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="quiz-progress">
-          <div class="quiz-progress-top"><span id="questionCounter">1 / 5</span><span>문제 진행률</span></div>
-          <div class="subject-track"><span id="quizProgressBar" style="width:20%"></span></div>
-        </div>
-        <div id="questionArea">
-          <span class="question-kicker" id="questionSubject">Kubernetes · 기본</span>
-          <h3 class="question-title" id="questionText"></h3>
-          <div class="answers" id="answerList"></div>
-          <div class="explanation" id="explanation" hidden></div>
-          <div class="quiz-footer"><button class="button primary" id="nextQuestion" type="button" disabled>정답 확인</button></div>
-        </div>
-      </div>
-    </section>
-  </div>
-
   <div class="modal-backdrop" id="aiConsentModal" hidden>
     <section class="modal" role="dialog" aria-modal="true" aria-labelledby="aiConsentTitle">
       <div class="modal-head">
@@ -1344,7 +1353,7 @@
         <button class="close-button" type="button" data-close="aiConsentModal" aria-label="닫기">×</button>
       </div>
       <div class="modal-body">
-        <p class="ai-consent-note">선택한 과목·수준과 필요한 학습 내용만 Cloudflare Workers AI로 전송합니다. 이메일, 비밀번호, 인증 토큰은 전송하지 않습니다.</p>
+        <p class="ai-consent-note">선택한 과목·수준과 필요한 학습 내용만 Google Gemini API로 전송합니다. 이메일, 비밀번호, 인증 토큰은 전송하지 않습니다.</p>
         <form id="aiConsentForm">
           <div class="field"><label for="aiExplanationStyle">설명 방식</label><select id="aiExplanationStyle"><option value="BRIEF">간결하게</option><option value="DETAILED">자세하게</option><option value="PRACTICAL">실습 중심</option></select></div>
           <div class="field"><label for="aiAvailableMinutes">희망 학습 시간</label><input id="aiAvailableMinutes" type="number" min="5" max="240" step="5" value="30" required></div>

@@ -11,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AiPreferencesService {
-    public static final String PRIVACY_NOTICE_VERSION = "neuroplan-ai-v1";
+    public static final String PRIVACY_NOTICE_VERSION = "neuroplan-ai-gemini-v2";
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -56,18 +56,23 @@ public class AiPreferencesService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "희망 학습 시간은 5분에서 240분 사이여야 합니다.");
         }
         AiPreferenceResponse current = status(userId);
-        if (enabled && current.consentAt() == null && !consent) {
+        boolean currentNoticeAccepted = current.consentAt() != null
+                && PRIVACY_NOTICE_VERSION.equals(current.privacyNoticeVersion());
+        if (enabled && !currentNoticeAccepted && !consent) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "외부 AI 처리 안내에 동의해야 AI 기능을 사용할 수 있습니다.");
         }
         if (enabled && consent) {
             jdbcTemplate.update("""
                     UPDATE user_ai_preferences
                        SET ai_enabled = TRUE,
-                           ai_consent_at = COALESCE(ai_consent_at, CURRENT_TIMESTAMP(6)),
+                           ai_consent_at = CASE
+                               WHEN privacy_notice_version = ? THEN COALESCE(ai_consent_at, CURRENT_TIMESTAMP(6))
+                               ELSE CURRENT_TIMESTAMP(6)
+                           END,
                            privacy_notice_version = ?, explanation_style = ?, available_minutes = ?,
                            updated_at = CURRENT_TIMESTAMP(6)
                      WHERE user_id = ?
-                    """, PRIVACY_NOTICE_VERSION, style, availableMinutes, userId);
+                    """, PRIVACY_NOTICE_VERSION, PRIVACY_NOTICE_VERSION, style, availableMinutes, userId);
         } else {
             jdbcTemplate.update("""
                     UPDATE user_ai_preferences
@@ -81,7 +86,8 @@ public class AiPreferencesService {
 
     public AiPreferenceResponse requireEnabled(long userId) {
         AiPreferenceResponse preference = status(userId);
-        if (!preference.enabled() || preference.consentAt() == null) {
+        if (!preference.enabled() || preference.consentAt() == null
+                || !PRIVACY_NOTICE_VERSION.equals(preference.privacyNoticeVersion())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "AI 기능 사용 동의와 활성화가 필요합니다.");
         }
         return preference;

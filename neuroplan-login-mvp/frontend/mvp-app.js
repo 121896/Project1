@@ -172,7 +172,7 @@
   }
 
   function showRefreshLoading() {
-    setAiLoading(true, "최신 학습 데이터를 불러오고 있어요", "현재 페이지의 서버 데이터를 새로고침하고 있습니다.", 0);
+    setAiLoading(true, "새로고침 중입니다.", "현재 페이지의 최신 데이터를 불러오고 있습니다.", 0);
     return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   }
 
@@ -425,9 +425,20 @@
     }
     // The admin view uses a separate page container. Restore the regular
     // learning shell before activating account or category content.
+    const previousPage = activePage;
     showLearningShell();
     activePage = page;
-    $$('[data-page-section]').forEach(section => { section.hidden = section.dataset.pageSection !== page; });
+    const pageOrder = ["dashboard", "plan", "quiz", "wrong", "history", "account"];
+    const enteringFromRight = pageOrder.indexOf(page) >= pageOrder.indexOf(previousPage);
+    $$('[data-page-section]').forEach(section => {
+      const becomesVisible = section.dataset.pageSection === page;
+      section.hidden = !becomesVisible;
+      section.classList.remove("page-swipe-enter-left", "page-swipe-enter-right");
+      if (becomesVisible && page !== previousPage) {
+        // A later page enters from the right; returning pages enter from the left.
+        section.classList.add(enteringFromRight ? "page-swipe-enter-right" : "page-swipe-enter-left");
+      }
+    });
     $$('[data-page]').forEach(button => button.classList.toggle("active", button.dataset.page === page));
     if (page === "history") await loadPlanHistory();
     if (page === "account") updateReauthStatus();
@@ -804,10 +815,13 @@
     openModal("aiConsentModal");
   }
 
+  const aiPrivacyNoticeVersion = "neuroplan-ai-gemini-v2";
+
   async function ensureAiEnabled(action) {
     if (!apiConfig.enabled) return action();
     const preference = state.ai.preferences || defaultState.ai.preferences;
-    if (preference.enabled && preference.consentAt) return action();
+    if (preference.enabled && preference.consentAt
+        && preference.privacyNoticeVersion === aiPrivacyNoticeVersion) return action();
     openAiSettings(action);
     return undefined;
   }
@@ -1074,8 +1088,6 @@
   }
 
   function renderAiFeatures() {
-    const panel = $("#aiQuotaCard");
-    panel.hidden = !state.authenticated;
     $("#aiTokenChip").hidden = !state.authenticated;
     const quota = state.ai.quota;
     const preference = state.ai.preferences || defaultState.ai.preferences;
@@ -1092,9 +1104,6 @@
       const dailyLimit = Number(quota.dailyLimit || 0);
       const percent = dailyLimit > 0 ? Math.round((remaining / dailyLimit) * 100) : 0;
       const boundedPercent = Math.max(0, Math.min(percent, 100));
-      $("#aiRemainingTokens").textContent = remaining.toLocaleString("ko-KR");
-      $("#aiDailyLimit").textContent = dailyLimit.toLocaleString("ko-KR");
-      $("#aiQuotaBar").style.width = `${boundedPercent}%`;
       $("#aiTokenChipValue").textContent = `${remaining.toLocaleString("ko-KR")} / ${dailyLimit.toLocaleString("ko-KR")}`;
       $("#aiTokenChipBar").style.width = `${boundedPercent}%`;
       $("#aiTokenChip").classList.toggle("low", boundedPercent > 20 && boundedPercent <= 40);
@@ -1102,26 +1111,20 @@
       $(".ai-token-chip-track").setAttribute("aria-valuenow", String(boundedPercent));
       $(".ai-token-chip-track").setAttribute("aria-valuetext", `${remaining.toLocaleString("ko-KR")} / ${dailyLimit.toLocaleString("ko-KR")} 남음`);
       $("#aiTokenChip").title = `오늘 AI 토큰 ${remaining.toLocaleString("ko-KR")} / ${dailyLimit.toLocaleString("ko-KR")} 남음`;
-      $("#aiQuotaStatus").textContent = preference.enabled ? `오늘 ${Number(quota.usedToday).toLocaleString("ko-KR")} 토큰 사용` : "동의 후 AI 기능 사용 가능";
     } else {
-      $("#aiRemainingTokens").textContent = "-";
-      $("#aiDailyLimit").textContent = "-";
-      $("#aiQuotaBar").style.width = "0%";
       $("#aiTokenChipValue").textContent = "- / -";
       $("#aiTokenChipBar").style.width = "0%";
       $("#aiTokenChip").classList.remove("low", "critical");
       $(".ai-token-chip-track").setAttribute("aria-valuenow", "0");
       $(".ai-token-chip-track").setAttribute("aria-valuetext", "확인할 수 없음");
-      $("#aiQuotaStatus").textContent = apiConfig.enabled ? "AI 상태 확인 필요" : "데모 모드";
     }
-    $("#aiSettingsButton").textContent = preference.enabled ? "AI 설정 변경" : "AI 사용 설정";
     $("#generateRecommendation").disabled = !state.authenticated || !hasCompleteProfile();
 
     const code = state.activeSubjectCode || state.subjects[0];
     const recommendation = (state.ai.recommendations || []).find(item => item.subjectCode === code);
     $("#aiRecommendationResult").className = recommendation ? "ai-recommendation-result" : "empty-state";
     $("#aiRecommendationResult").innerHTML = recommendation
-      ? `<strong>${escapeHtml(recommendation.title)}</strong><p>${escapeHtml(recommendation.content)}</p><div class="ai-recommendation-meta">${escapeHtml(recommendation.subjectName)} · 우선순위 ${recommendation.priority}/5</div>`
+      ? `<strong>${escapeHtml(recommendation.title)}</strong><div class="ai-recommendation-content">${planStepContentHtml(recommendation.content)}</div><div class="ai-recommendation-meta">${escapeHtml(recommendation.subjectName)} · 우선순위 ${recommendation.priority}/5</div>`
       : '<div><strong>아직 생성된 추천이 없습니다.</strong><span>현재 선택한 과목의 추천 생성 버튼을 눌러 주세요.</span></div>';
   }
 
@@ -1221,7 +1224,7 @@
     $("#aiQuizButton").disabled = !hasProfile || !state.quizSubjectCode;
     $("#quizGuide").textContent = state.quizFinished
       ? "최근 문제은행 결과가 대시보드에 반영되었습니다. 기존 문제 또는 AI 새 문제를 다시 풀 수 있어요."
-      : "플랜 체크 여부와 관계없이 기존 문제은행 5문제 또는 AI가 새로 만든 3문제를 풀 수 있습니다.";
+      : "플랜 체크 여부와 관계없이 기존 문제은행 5문제 또는 AI가 새로 만든 5문제를 풀 수 있습니다.";
 
     if (!state.authenticated) $("#mainAction").textContent = "회원가입하고 시작하기";
     else if (!hasProfile) $("#mainAction").textContent = "과목·수준 설정하기";
@@ -1341,14 +1344,19 @@
     const run = async () => {
       const button = useAi ? $("#aiQuizButton") : $("#quizButton");
       button.disabled = true;
-      if (useAi) await showAiLoading(`AI가 ${subjectName(code)} 확인 문제 3개를 만들고 있어요`);
+      if (useAi) await showAiLoading(`AI가 ${subjectName(code)} 확인 문제 5개를 만들고 있어요`);
       try {
         if (useAi && apiConfig.enabled) {
-          const generated = await apiRequest(`/ai/questions?subjectCode=${encodeURIComponent(code)}&count=3`, { method: "POST" });
+          const generated = await apiRequest(`/ai/questions?subjectCode=${encodeURIComponent(code)}`, { method: "POST" });
           questions = generated.questions.map(question => ({
             ...question,
-            id: question.questionNo,
-            options: question.options.map(option => ({ id: option.optionNo, text: option.text }))
+            // AI 문제도 서버에서 문제은행 형식으로 저장한 실제 ID를 사용한다.
+            id: question.id,
+            options: question.options.map(option => ({
+              id: option.id,
+              optionNo: option.optionNo,
+              text: option.text
+            }))
           }));
           aiQuizRunId = generated.generationRunId;
           updateAiQuota(generated.quota);
@@ -1365,8 +1373,10 @@
         quizScore = 0;
         chosenAnswer = null;
         answerChecked = false;
+        await showPage("quiz");
+        $("#quizWorkspace").hidden = false;
         renderQuestion();
-        openModal("quizModal");
+        $("#quizWorkspace").scrollIntoView({ behavior: "smooth", block: "start" });
       } catch (error) {
         if (useAi) await handleAiRequestError(error);
         else toast(error.message);
@@ -1396,7 +1406,7 @@
     $("#explanation").hidden = true;
     $("#explanation").textContent = "";
     $("#nextQuestion").disabled = true;
-    $("#nextQuestion").textContent = "정답 확인";
+    $("#nextQuestion").textContent = "답안 제출";
     chosenAnswer = null;
     answerChecked = false;
   }
@@ -1537,7 +1547,6 @@
 
   $("#generatePlan").addEventListener("click", generatePlan);
   $("#generateRecommendation").addEventListener("click", generateRecommendation);
-  $("#aiSettingsButton").addEventListener("click", () => openAiSettings());
   $("#aiConsentForm").addEventListener("submit", async event => {
     event.preventDefault();
     const consent = $("#aiConsentCheck").checked;
@@ -1944,11 +1953,12 @@
     if (!answerChecked) {
       $("#nextQuestion").disabled = true;
       try {
+        const selectedOption = question.options.find(option => option.id === chosenAnswer);
         const checked = apiConfig.enabled
           ? await apiRequest(quizMode === "AI" ? `/ai/questions/${aiQuizRunId}/check` : "/learning/diagnosis/check", {
               method: "POST",
               body: JSON.stringify(quizMode === "AI"
-                ? { questionNo: question.questionNo, selectedOptionNo: chosenAnswer }
+                ? { questionNo: question.questionNo, selectedOptionNo: selectedOption?.optionNo }
                 : { questionId: question.id, selectedOptionId: chosenAnswer })
             })
           : {
@@ -1963,7 +1973,10 @@
         $$('[data-answer]').forEach(button => {
           const optionId = Number(button.dataset.answer);
           button.classList.remove("selected");
-          if (optionId === (quizMode === "AI" ? checked.correctOptionNo : checked.correctOptionId)) button.classList.add("correct");
+          const option = question.options.find(item => item.id === optionId);
+          if ((quizMode === "AI"
+            ? (option?.optionNo === checked.correctOptionNo || optionId === checked.correctOptionNo)
+            : optionId === checked.correctOptionId)) button.classList.add("correct");
           else if (optionId === chosenAnswer) button.classList.add("wrong");
         });
         $("#explanation").textContent = `${checked.correct ? "정답입니다. " : "아쉽지만 오답입니다. "}${checked.explanation}`;
@@ -1985,10 +1998,7 @@
 
     $("#nextQuestion").disabled = true;
     try {
-      if (quizMode === "AI") {
-        state.quizCorrect = quizScore;
-        state.quizTotal = questions.length;
-      } else if (apiConfig.enabled) {
+      if (apiConfig.enabled) {
         const result = await apiRequest("/learning/diagnosis/attempts", {
           method: "POST", body: JSON.stringify({ subjectCode: state.quizSubjectCode || state.subjects[0], answers: quizAnswers })
         });
@@ -2003,11 +2013,11 @@
         state.stats.correctCount += quizScore;
         saveState();
       }
-      closeModal("quizModal");
+      $("#quizWorkspace").hidden = true;
       updateUI();
       const rate = Math.round((state.quizCorrect / Math.max(state.quizTotal, 1)) * 100);
       toast(quizMode === "AI"
-        ? `AI 연습 문제 정답률은 ${rate}%입니다. 문제은행 통계에는 반영되지 않습니다.`
+        ? `AI 문제 정답률 ${rate}%가 학습 통계와 오답 노트에 반영됐습니다.`
         : `정답률 ${rate}%가 대시보드에 반영됐어요.`);
       $("#dashboard").scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {

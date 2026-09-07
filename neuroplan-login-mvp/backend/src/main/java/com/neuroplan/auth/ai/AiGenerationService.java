@@ -7,16 +7,19 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.neuroplan.auth.ai.AiQuotaService.AiQuotaResponse;
-import com.neuroplan.auth.ai.CloudflareAiClient.AiProviderException;
-import com.neuroplan.auth.ai.CloudflareAiClient.AiProviderResponse;
+import com.neuroplan.auth.ai.GeminiAiClient.AiProviderException;
+import com.neuroplan.auth.ai.GeminiAiClient.AiProviderResponse;
 import com.neuroplan.auth.error.ApiException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -24,17 +27,18 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class AiGenerationService {
+    private static final Logger log = LoggerFactory.getLogger(AiGenerationService.class);
     private static final String JSON_ONLY = "설명과 마크다운 코드 블록 없이 유효한 JSON 객체만 반환하세요. ";
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
-    private final CloudflareAiClient client;
+    private final GeminiAiClient client;
     private final AiQuotaService quotaService;
     private final AiPreferencesService preferencesService;
     private final AiProperties properties;
 
     public AiGenerationService(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
-                               CloudflareAiClient client, AiQuotaService quotaService,
+                               GeminiAiClient client, AiQuotaService quotaService,
                                AiPreferencesService preferencesService, AiProperties properties) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
@@ -50,17 +54,19 @@ public class AiGenerationService {
         String input = subjectName + "|" + levelLabel + "|PLAN";
         long runId = startRun(userId, subjectId, "PLAN", input);
         Instant startedAt = Instant.now();
+        log.info("AI plan generation started: runId={}, userId={}, subjectId={}, model={}",
+                runId, userId, subjectId, properties.getModel());
+        PlanStyle planStyle = planStyle(preference.explanationStyle());
         String systemPrompt = JSON_ONLY + "당신은 IT 교육용 3단계 학습 플랜 생성기입니다. "
                 + "출력 키는 title, rationale, steps이며 steps는 정확히 3개입니다. "
                 + "각 단계는 stepNo, title, content를 포함하고 stepNo는 1, 2, 3입니다. "
-                + "content는 3개의 구체적인 실습 행동을 줄바꿈으로 구분해 작성하고, "
-                + "각 줄 앞에 번호나 기호를 붙이지 마세요.";
+                + planStyle.systemInstruction();
         String userPrompt = "%s %s 학습자를 위한 오늘의 3단계 학습 플랜을 한국어로 작성하세요. "
-                + "총 학습 시간은 약 %d분이고 설명 방식은 %s입니다. 각 단계는 오늘 수행 가능한 구체적인 실습이어야 합니다.";
+                + "총 학습 시간은 약 %d분입니다. 설명 방식은 %s입니다. %s";
         userPrompt = userPrompt.formatted(subjectName, levelLabel, preference.availableMinutes(),
-                styleLabel(preference.explanationStyle()));
+                planStyle.label(), planStyle.userInstruction());
         try {
-            AiProviderResponse response = client.generateJson(systemPrompt, userPrompt);
+            AiProviderResponse response = client.generateJson(systemPrompt, userPrompt, planSchema());
             try {
                 requireCompleteResponse(response);
                 PlanContent content = parsePlan(response.content(), subjectName, levelLabel);
@@ -81,9 +87,25 @@ public class AiGenerationService {
                 return new PlanGeneration(runId, true, fallback, quota);
             }
         } catch (AiProviderException exception) {
+            log.warn("AI plan provider fallback: runId={}, code={}, httpStatus={}",
+                    runId, exception.code(), exception.httpStatus());
             PlanContent fallback = fallbackPlan(subjectName, levelLabel);
             completeRun(runId, "FALLBACK", null, startedAt, writeJson(fallback),
                     exception.code(), exception.getMessage(), exception.httpStatus());
+            return new PlanGeneration(runId, true, fallback, quotaService.status(userId));
+        } catch (RuntimeException exception) {
+            // A failure after Gemini replied (ledger/DB serialization, for example) used to
+            // bubble up as a bare HTTP 500. Keep the user's learning flow usable while
+            // retaining an execution record that identifies the failed stage in pod logs.
+            log.error("AI plan processing fallback: runId={}, userId={}, subjectId={}",
+                    runId, userId, subjectId, exception);
+            markUnexpectedFailure(runId, exception);
+            PlanContent fallback = fallbackPlan(subjectName, levelLabel);
+            try {
+                quotaService.refundUsage(userId, runId, "AI 플랜 내부 처리 실패 환불");
+            } catch (RuntimeException refundFailure) {
+                log.error("AI plan refund failed: runId={}", runId, refundFailure);
+            }
             return new PlanGeneration(runId, true, fallback, quotaService.status(userId));
         }
     }
@@ -102,7 +124,7 @@ public class AiGenerationService {
                 + "틀린 이유를 비난 없이 %s 방식으로 설명하고 바로 실행할 수 있는 재학습 행동을 추천하세요."
                 .formatted(styleLabel(preference.explanationStyle()));
         try {
-            AiProviderResponse response = client.generateJson(systemPrompt, userPrompt);
+            AiProviderResponse response = client.generateJson(systemPrompt, userPrompt, feedbackSchema());
             try {
                 requireCompleteResponse(response);
                 FeedbackContent content = parseFeedback(response.content());
@@ -136,7 +158,7 @@ public class AiGenerationService {
                 + "약 %d분 안에 수행할 수 있도록 취약점을 보완할 다음 학습 한 가지를 %s 방식의 구체적인 실행 방법과 함께 추천하세요."
                 .formatted(preference.availableMinutes(), styleLabel(preference.explanationStyle()));
         try {
-            AiProviderResponse response = client.generateJson(systemPrompt, userPrompt);
+            AiProviderResponse response = client.generateJson(systemPrompt, userPrompt, recommendationSchema());
             try {
                 requireCompleteResponse(response);
                 RecommendationContent content = parseRecommendation(response.content(), context.subjectName());
@@ -158,24 +180,24 @@ public class AiGenerationService {
     }
 
     public QuizGeneration generateQuiz(long userId, long subjectId, String subjectName,
-                                       String levelLabel, int requestedCount) {
+                                       String levelLabel) {
         preferencesService.requireEnabled(userId);
         quotaService.requireAvailable(userId);
-        int count = Math.min(Math.max(requestedCount, 3), 5);
+        int count = 5;
         String input = subjectName + "|" + levelLabel + "|QUIZ|" + count;
         long runId = startRun(userId, subjectId, "QUESTION_DRAFT", input);
         Instant startedAt = Instant.now();
         String systemPrompt = JSON_ONLY + "당신은 IT 교육용 객관식 확인 문제 생성기입니다. "
                 + "출력 키는 questions이며 정확히 " + count + "개입니다. "
-                + "각 문제는 questionNo, text, difficulty, explanation, options를 포함합니다. "
-                + "options는 optionNo, text, correct를 가진 정확히 4개 보기이며 정답은 하나뿐입니다. "
+                + "각 문제는 questionNo, text, difficulty, explanation, options, correctOptionNo를 포함합니다. "
+                + "options는 optionNo와 text를 가진 정확히 4개 보기이며 correctOptionNo는 1에서 4 사이입니다. "
                 + "문제는 100자, 보기는 60자, 해설은 180자 이내로 간결하게 작성하세요.";
         String userPrompt = ("%s %s 학습자를 위한 서로 중복되지 않는 확인 문제 %d개를 한국어로 작성하세요. "
                 + "암기만 묻지 말고 실제 상황 판단과 개념 이해를 고르게 확인하세요.")
                 .formatted(subjectName, levelLabel, count);
         try {
             AiProviderResponse response = client.generateJson(
-                    systemPrompt, userPrompt, properties.getQuizMaxCompletionTokens());
+                    systemPrompt, userPrompt, properties.getQuizMaxCompletionTokens(), quizSchema(count));
             try {
                 requireCompleteResponse(response);
                 QuizContent content = parseQuiz(response.content(), subjectName, levelLabel, count);
@@ -273,7 +295,7 @@ public class AiGenerationService {
 
     private void requireCompleteResponse(AiProviderResponse response) {
         if (!response.completedNormally()) {
-            throw new IllegalArgumentException("Workers AI completion ended with finish_reason="
+            throw new IllegalArgumentException("Gemini API generation ended with finishReason="
                     + response.finishReason());
         }
     }
@@ -343,8 +365,117 @@ public class AiGenerationService {
                 errorCode,
                 truncate(errorMessage, 500),
                 response == null ? null : response.usageUnits(),
-                response == null || response.usageUnits() == null ? null : "NEURONS",
+                response == null || response.usageUnits() == null ? null : "TOKENS",
                 runId
+        );
+        log.info("AI generation completed runId={} provider={} model={} status={} errorCode={} httpStatus={} latencyMs={} inputTokens={} outputTokens={}",
+                runId, properties.getProvider(), properties.getModel(), status, errorCode, httpStatus, latency,
+                response == null ? null : response.inputTokens(),
+                response == null ? null : response.outputTokens());
+    }
+
+    private void markUnexpectedFailure(long runId, RuntimeException exception) {
+        try {
+            jdbcTemplate.update("""
+                    UPDATE ai_generation_runs
+                       SET generation_status = 'FAILED',
+                           error_code = 'PROCESSING_FAILED',
+                           error_message = ?,
+                           completed_at = CURRENT_TIMESTAMP(6)
+                     WHERE id = ?
+                    """, truncate("플랜 내부 처리 실패: " + exception.getClass().getSimpleName(), 500), runId);
+        } catch (RuntimeException statusFailure) {
+            log.error("AI plan failure status update failed: runId={}", runId, statusFailure);
+        }
+    }
+
+    private Map<String, Object> planSchema() {
+        Map<String, Object> stepSchema = Map.of(
+                "type", "object",
+                "additionalProperties", false,
+                "properties", Map.of(
+                        "stepNo", Map.of("type", "integer", "minimum", 1, "maximum", 3),
+                        "title", Map.of("type", "string"),
+                        "content", Map.of("type", "string")
+                ),
+                "required", List.of("stepNo", "title", "content")
+        );
+        return Map.of(
+                "type", "object",
+                "additionalProperties", false,
+                "properties", Map.of(
+                        "title", Map.of("type", "string"),
+                        "rationale", Map.of("type", "string"),
+                        "steps", Map.of(
+                                "type", "array", "minItems", 3, "maxItems", 3, "items", stepSchema)
+                ),
+                "required", List.of("title", "rationale", "steps")
+        );
+    }
+
+    private Map<String, Object> feedbackSchema() {
+        return Map.of(
+                "type", "object",
+                "additionalProperties", false,
+                "properties", Map.of(
+                        "feedback", Map.of("type", "string"),
+                        "recommendedActions", Map.of(
+                                "type", "array",
+                                "minItems", 2,
+                                "maxItems", 3,
+                                "items", Map.of("type", "string")
+                        )
+                ),
+                "required", List.of("feedback", "recommendedActions")
+        );
+    }
+
+    private Map<String, Object> recommendationSchema() {
+        return Map.of(
+                "type", "object",
+                "additionalProperties", false,
+                "properties", Map.of(
+                        "title", Map.of("type", "string"),
+                        "content", Map.of("type", "string"),
+                        "priority", Map.of("type", "integer", "minimum", 1, "maximum", 5)
+                ),
+                "required", List.of("title", "content", "priority")
+        );
+    }
+
+    private Map<String, Object> quizSchema(int count) {
+        Map<String, Object> optionSchema = Map.of(
+                "type", "object",
+                "additionalProperties", false,
+                "properties", Map.of(
+                        "optionNo", Map.of("type", "integer", "minimum", 1, "maximum", 4),
+                        "text", Map.of("type", "string")
+                ),
+                "required", List.of("optionNo", "text")
+        );
+        Map<String, Object> questionSchema = Map.of(
+                "type", "object",
+                "additionalProperties", false,
+                "properties", Map.of(
+                        "questionNo", Map.of("type", "integer", "minimum", 1, "maximum", count),
+                        "text", Map.of("type", "string"),
+                        "difficulty", Map.of("type", "string"),
+                        "explanation", Map.of("type", "string"),
+                        "options", Map.of(
+                                "type", "array", "minItems", 4, "maxItems", 4, "items", optionSchema),
+                        "correctOptionNo", Map.of("type", "integer", "minimum", 1, "maximum", 4)
+                ),
+                "required", List.of(
+                        "questionNo", "text", "difficulty", "explanation", "options", "correctOptionNo")
+        );
+        return Map.of(
+                "type", "object",
+                "additionalProperties", false,
+                "properties", Map.of(
+                        "questions", Map.of(
+                                "type", "array", "minItems", count, "maxItems", count, "items", questionSchema)
+                ),
+                "required", List.of("questions")
         );
     }
 
@@ -561,6 +692,29 @@ public class AiGenerationService {
         };
     }
 
+    private PlanStyle planStyle(String style) {
+        return switch (style) {
+            case "DETAILED" -> new PlanStyle(
+                    "자세하게",
+                    "각 단계 content는 줄바꿈으로 구분한 정확히 4개의 행동으로 작성하세요. "
+                            + "순서는 개념·이유 확인, 실행 절차, 기대 결과, 점검 기준입니다. 각 줄 앞에는 번호나 기호를 붙이지 마세요.",
+                    "각 단계에서 왜 하는지와 확인 기준이 드러나도록 구체적으로 설명하되, 실제로 실행 가능한 명령·화면·결과를 포함하세요."
+            );
+            case "PRACTICAL" -> new PlanStyle(
+                    "실습 중심",
+                    "각 단계 content는 줄바꿈으로 구분한 정확히 4개의 실습 행동으로 작성하세요. "
+                            + "순서는 준비, 실행 명령 또는 조작, 기대 결과, 검증 또는 정리입니다. 각 줄 앞에는 번호나 기호를 붙이지 마세요.",
+                    "설명보다 손으로 실행하는 과정을 우선하세요. 안전한 범위에서 바로 입력할 명령·조작과 확인할 출력 또는 상태를 반드시 포함하세요."
+            );
+            default -> new PlanStyle(
+                    "간결하게",
+                    "각 단계 content는 줄바꿈으로 구분한 정확히 2개의 짧은 행동으로 작성하세요. "
+                            + "핵심 확인 한 가지와 바로 할 실습 또는 점검 한 가지로 제한하며, 각 줄 앞에는 번호나 기호를 붙이지 마세요.",
+                    "불필요한 배경 설명을 빼고 오늘 바로 끝낼 수 있는 핵심 행동만 제시하세요."
+            );
+        };
+    }
+
     public record PlanStepContent(int stepNo, String title, String content) {}
     public record PlanContent(String title, String rationale, List<PlanStepContent> steps) {}
     public record PlanGeneration(long generationRunId, boolean fallback, PlanContent content, AiQuotaResponse quota) {}
@@ -577,4 +731,5 @@ public class AiGenerationService {
     public record WrongNoteContext(long questionId, long subjectId, String subjectName, String questionText,
                                    String selectedAnswer, String correctAnswer, String explanation) {}
     public record RecommendationContext(long subjectId, String subjectName, String learningLevel, String summary) {}
+    private record PlanStyle(String label, String systemInstruction, String userInstruction) {}
 }

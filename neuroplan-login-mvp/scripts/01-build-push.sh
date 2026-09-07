@@ -3,9 +3,9 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-REGISTRY="${REGISTRY:-192.168.34.21:5000/neuroplan}"
+REGISTRY="${REGISTRY:-harbor.nplan.local:80/neuroplan}"
 VERSION="${VERSION:-0.8.0}"
-AUTHFILE="${REGISTRY_AUTH_FILE:-$HOME/.config/containers/dockerhub-auth.json}"
+AUTHFILE="${REGISTRY_AUTH_FILE:-$HOME/.config/containers/auth.json}"
 
 command -v podman >/dev/null 2>&1 || { echo "[FAIL] podman not found" >&2; exit 1; }
 [[ -f "$APP_DIR/frontend/index.html" ]] || {
@@ -16,9 +16,9 @@ command -v podman >/dev/null 2>&1 || { echo "[FAIL] podman not found" >&2; exit 
 BUILD_AUTH=()
 if [[ -s "$AUTHFILE" ]]; then
   BUILD_AUTH=(--authfile "$AUTHFILE")
-  echo "[INFO] Docker Hub auth file: $AUTHFILE"
+  echo "[INFO] Container registry auth file: $AUTHFILE"
 else
-  echo "[WARN] Docker Hub auth file not found; public base-image pulls may be rate-limited"
+  echo "[WARN] Container registry auth file not found; Harbor push may require a prior podman login"
 fi
 
 echo "[INFO] building frontend:${VERSION}"

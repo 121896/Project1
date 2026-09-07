@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AiQuotaService {
     private static final int LEGACY_DEFAULT_DAILY_LIMIT = 5000;
+    private static final int PREVIOUS_DEFAULT_DAILY_LIMIT = 20000;
     private final JdbcTemplate jdbcTemplate;
     private final AiProperties properties;
 
@@ -27,15 +28,16 @@ public class AiQuotaService {
                 ) VALUES (?, ?, NULL, TRUE, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
                 ON DUPLICATE KEY UPDATE
                     updated_at = CASE
-                        WHEN daily_token_limit = ? THEN CURRENT_TIMESTAMP(6)
+                        WHEN daily_token_limit IN (?, ?) THEN CURRENT_TIMESTAMP(6)
                         ELSE updated_at
                     END,
                     daily_token_limit = CASE
-                        WHEN daily_token_limit = ? THEN VALUES(daily_token_limit)
+                        WHEN daily_token_limit IN (?, ?) THEN VALUES(daily_token_limit)
                         ELSE daily_token_limit
                     END
                 """, userId, properties.getDailyTokenLimit(),
-                LEGACY_DEFAULT_DAILY_LIMIT, LEGACY_DEFAULT_DAILY_LIMIT);
+                LEGACY_DEFAULT_DAILY_LIMIT, PREVIOUS_DEFAULT_DAILY_LIMIT,
+                LEGACY_DEFAULT_DAILY_LIMIT, PREVIOUS_DEFAULT_DAILY_LIMIT);
     }
 
     public AiQuotaResponse status(long userId) {
@@ -95,6 +97,7 @@ public class AiQuotaService {
                             ON refunded.generation_run_id = r.id
                            AND refunded.entry_type = 'REFUND'
                          WHERE r.generation_status = 'SUCCEEDED'
+                           AND r.provider = ?
                            AND refunded.id IS NULL
                        ) AS token_usage_source
                  WHERE token_usage_source.feature IN ('PLAN', 'WRONG_FEEDBACK', 'WEEKLY_INSIGHT', 'QUESTION_DRAFT')
@@ -102,7 +105,7 @@ public class AiQuotaService {
                  ORDER BY FIELD(token_usage_source.feature, 'PLAN', 'QUESTION_DRAFT', 'WRONG_FEEDBACK', 'WEEKLY_INSIGHT')
                 """, (rs, rowNum) -> new AiFeatureTokenAverage(
                 rs.getString("feature"), rs.getInt("average_tokens"), rs.getInt("sample_count")
-        ));
+        ), properties.getProvider());
     }
 
     public AiQuotaResponse requireAvailable(long userId) {
@@ -119,14 +122,15 @@ public class AiQuotaService {
     @Transactional
     public AiQuotaResponse recordUsage(long userId, long generationRunId, int inputTokens, int outputTokens,
                                        java.math.BigDecimal usageUnits) {
-        int total = Math.max(inputTokens, 0) + Math.max(outputTokens, 0);
+        int measuredTotal = Math.max(inputTokens, 0) + Math.max(outputTokens, 0);
+        int total = usageUnits == null ? measuredTotal : Math.max(usageUnits.intValue(), measuredTotal);
         if (total == 0) return status(userId);
         jdbcTemplate.update("""
                 INSERT INTO ai_token_ledger (
                     user_id, generation_run_id, entry_type, token_delta,
                     input_tokens, output_tokens, provider_usage_units, provider_usage_unit,
                     description, created_at
-                ) VALUES (?, ?, 'USAGE', ?, ?, ?, ?, 'NEURONS', 'Cloudflare Workers AI 사용', CURRENT_TIMESTAMP(6))
+                ) VALUES (?, ?, 'USAGE', ?, ?, ?, ?, 'TOKENS', 'Google Gemini API 사용', CURRENT_TIMESTAMP(6))
                 ON DUPLICATE KEY UPDATE id = id
                 """, userId, generationRunId, total, inputTokens, outputTokens, usageUnits);
         return status(userId);

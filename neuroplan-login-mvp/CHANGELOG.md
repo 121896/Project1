@@ -1,7 +1,29 @@
 # 변경 이력
 
+## Unreleased
+
+- 오른쪽 위 토큰 표기를 `오늘의 AI 토큰`으로 통일하고, 프로필 카드의 중복 토큰 박스를 제거
+- 공통 새로고침 전용 로딩 문구와 메뉴 이동 방향별 좌우 전환 애니메이션 추가
+- AI 플랜의 간결·상세·실습 중심 설명 방식에 서로 다른 단계 수·행동 구조를 요구하는 Gemini 프롬프트 적용
+- AI 다음 학습 추천의 줄바꿈 실행 항목을 플랜과 같은 번호 목록으로 렌더링
+- AI 확인 문제를 모달 대신 문제 풀이 페이지에 표시하고 `답안 제출` 흐름으로 통합
+- 생성된 AI 문제·보기를 기존 문제은행에 저장해 진단 통계와 오답 노트에 기록
+- 기본 일일 AI 토큰 한도를 30,000으로 올리고 기존 기본 한도 5,000·20,000 계정을 자동 상향
+- 플랜 생성 처리·저장 실패를 실행 번호와 함께 로그/실행 이력에 기록하고 내부 오류 시 폴백·환불을 시도
+
 ## 0.8.0 — 2026-09-01
 
+- 외부 LLM 공급자를 Cloudflare Workers AI에서 Google Gemini API `gemini-3.5-flash-lite`로 전면 교체
+- 플랜·문제·오답 해설·재학습 추천별 JSON Schema 구조화 출력과 Gemini 오류·종료 사유 분류 추가
+- Gemini의 실제 총 토큰을 `TOKENS` 단위로 요청 이력과 사용 원장에 기록하고 비정상 결과는 기존 정책대로 환불
+- Kubernetes AI Secret을 `neuroplan-gemini-secrets/GEMINI_API_KEY`로 변경하고 배포·Smoke Test 검증 추가
+- 최초 AI 사용 동의 안내의 외부 처리 주체를 Google Gemini로 변경
+- 외부 처리 업체 변경에 맞춰 동의문 버전을 `neuroplan-ai-gemini-v2`로 올리고 기존 사용자는 Gemini 첫 사용 시 재동의
+- Gemini AI 문제를 요청당 5개로 고정하고 전용 출력 한도를 1,600토큰으로 조정
+- Frontend/Backend 이미지 Registry를 Harbor `harbor.nplan.local:80/neuroplan`으로 전환하고 `harbor-pull-secret` Pull-only 연동 추가
+- Prometheus가 Longhorn Manager TCP/9500만 수집하도록 최소 권한 NetworkPolicy 매니페스트 추가
+- 수동 빌드 스크립트의 Registry 인증 기본 경로를 표준 containers `auth.json`으로 정리
+- 과거 Cloudflare 실행 이력은 보존하되 기능별 평균 토큰은 현재 Gemini 성공 요청만 집계하도록 분리
 - Cloudflare Workers AI `@cf/qwen/qwen3.8-27b` 연동과 UTF-8 JSON 응답 검증 추가
 - 선택한 과목·수준·희망 학습 시간 기반 AI 3단계 학습 플랜 생성 및 `daily_plan_ai_meta` 연결
 - 오답의 사용자 답안·정답·기존 해설 기반 AI 맞춤 피드백과 추천 행동 저장
@@ -9,7 +31,7 @@
 - 최초 AI 사용 동의, 설명 스타일, 희망 학습 시간 설정 추가
 - 사용자별 일일 토큰 한도·사용량·잔여량 표시와 중복 차감 방지 원장 기록 추가
 - 우측 상단에 `오늘 남은 토큰 / 일일 한도` 숫자와 잔량 막대를 함께 표시
-- 선택 과목·수준 기반 AI 객관식 3문제 생성과 생성 기록 기반 서버 채점 추가
+- 선택 과목·수준 기반 AI 객관식 5문제 생성과 생성 기록 기반 서버 채점 추가
 - Cloudflare Account ID/API Token을 `neuroplan-llm-secrets`에서만 주입하도록 배포 구성 분리
 - 외부 호출 인증·사용량 제한·시간 초과·잘못된 JSON 오류 분류와 정적 플랜 폴백 추가
 - 신규 회원의 AI 기본 설정·일일 토큰 한도 자동 생성 추가
@@ -39,7 +61,7 @@
 - 모든 사용자 학습 페이지에서 사용할 수 있는 공통 새로고침 버튼과 실제 데이터 요청 동안만 표시되는 로딩 오버레이 추가
 - 우측 하단 안내 메시지 표시 시간을 2.8초에서 6초로 연장
 - Smoke Test가 AI 문제 폴백을 실패로 판정하고 네 가지 AI 기능의 평균 토큰 집계를 검증하도록 강화
-- AI 문제 출력 한도 2,200토큰은 유지하고 생성 수를 5개에서 3개로 줄여 응답 잘림에 따른 `INVALID_JSON` 폴백을 완화
+- Cloudflare 연동 단계에서 AI 문제 출력 한도 2,200토큰을 유지하고 생성 수를 5개에서 3개로 줄여 `INVALID_JSON` 폴백을 완화
 - Qwen Thinking을 비활성화하고 `finish_reason`을 판별해 출력 한도 종료를 `OUTPUT_LIMIT`으로 기록·환불하도록 개선
 - AI 생성 설정 변경을 추적할 수 있도록 `LLM_PROMPT_VERSION`을 `neuroplan-0.8.0-v2`로 갱신
 - On-Prem 통합 테스트 전 릴리스 후보 상태이며, 통과 후 최종 릴리스·태그 처리 예정

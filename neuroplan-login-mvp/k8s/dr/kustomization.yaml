@@ -13,7 +13,7 @@ patches:
 
 images:
   - name: harbor.nplan.local:80/neuroplan/frontend
-    newTag: "d53cfac"
+    newTag: "3b0add6"
 
   - name: harbor.nplan.local:80/neuroplan/backend
-    newTag: "a707343"
+    newTag: "3b0add6"

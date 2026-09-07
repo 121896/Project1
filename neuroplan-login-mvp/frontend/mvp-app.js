@@ -1130,7 +1130,7 @@
 
   function renderPlanCriteria() {
     const preference = state.ai.preferences || defaultState.ai.preferences;
-    const styleLabels = { BRIEF: "간단히", DETAILED: "상세히", PRACTICAL: "실습 중심" };
+    const styleLabels = { BRIEF: "간단히", DETAILED: "자세히", PRACTICAL: "실습 중심" };
     const profileHtml = hasCompleteProfile()
       ? `<div class="plan-criteria-subjects">${state.subjects.map(code => `<span>${escapeHtml(subjectName(code))} · ${escapeHtml(state.subjectLevels[code])}</span>`).join("")}</div>`
       : `<strong>과목·수준 설정 전</strong>`;

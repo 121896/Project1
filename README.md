@@ -320,7 +320,7 @@ kubectl -n application create secret generic neuroplan-gemini-secrets \
 unset GEMINI_API_KEY
 ```
 
-`neuroplan-gemini-secrets`에는 `GEMINI_API_KEY`가 있어야 합니다. Secret 값은 로그, Git, ConfigMap, 이미지에 저장하지 않습니다. Gemini 전환 배포와 Smoke Test가 성공한 뒤에는 더 이상 참조되지 않는 기존 Cloudflare Secret을 삭제할 수 있습니다.
+`neuroplan-gemini-secrets`에는 `GEMINI_API_KEY`가 있어야 합니다. Secret 값은 로그, Git, ConfigMap, 이미지에 저장하지 않습니다. ConfigMap은 `LLM_PROVIDER=GEMINI`와 `GEMINI_*` 연결 정보를 사용하며, Gemini 전환 배포와 Smoke Test가 성공한 뒤에는 더 이상 참조되지 않는 기존 Cloudflare Secret을 삭제할 수 있습니다.
 
 ```bash
 kubectl -n application delete secret neuroplan-llm-secrets --ignore-not-found

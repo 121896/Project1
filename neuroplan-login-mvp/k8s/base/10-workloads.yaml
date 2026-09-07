@@ -15,6 +15,7 @@ data:
   # MVP 관리자 계정. 운영 전 팀 승인 이메일로 교체합니다(여러 개는 쉼표로 구분).
   ADMIN_EMAILS: admin@nplan.local
   LLM_ENABLED: "true"
+  # Gemini API만 사용합니다. API 키는 neuroplan-gemini-secrets에서 주입합니다.
   LLM_PROVIDER: GEMINI
   GEMINI_BASE_URL: https://generativelanguage.googleapis.com/v1beta
   GEMINI_MODEL: gemini-3.5-flash-lite

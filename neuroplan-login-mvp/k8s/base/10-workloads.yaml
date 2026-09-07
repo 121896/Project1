@@ -47,8 +47,6 @@ spec:
       imagePullSecrets:
         - name: harbor-pull-secret
       automountServiceAccountToken: false
-      imagePullSecrets:
-        - name: harbor-pull-secret
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -128,8 +126,6 @@ spec:
       imagePullSecrets:
         - name: harbor-pull-secret
       automountServiceAccountToken: false
-      imagePullSecrets:
-        - name: harbor-pull-secret
       securityContext:
         runAsNonRoot: true
         seccompProfile:

@@ -176,6 +176,11 @@ public class AdminController {
         }
 
         sessionRepository.revokeAllForUser(target.id(), Instant.now());
+        // 학습 운영 기능이 참조하는 새 FK를 먼저 해제해 기존 영구 삭제 흐름을 유지한다.
+        jdbcTemplate.update("UPDATE ai_problem_bank_settings SET is_enabled = FALSE, owner_user_id = NULL WHERE owner_user_id = ?", target.id());
+        jdbcTemplate.update("DELETE FROM user_notifications WHERE user_id = ?", target.id());
+        jdbcTemplate.update("DELETE FROM question_reports WHERE reporter_user_id = ? OR resolved_by_user_id = ?", target.id(), target.id());
+        jdbcTemplate.update("DELETE FROM user_active_plans WHERE user_id = ?", target.id());
         jdbcTemplate.update("DELETE FROM wrong_note_ai_feedback WHERE user_id = ?", target.id());
         jdbcTemplate.update("DELETE FROM next_plan_queue WHERE user_id = ?", target.id());
         jdbcTemplate.update("DELETE FROM ai_token_ledger WHERE user_id = ?", target.id());
@@ -284,6 +289,59 @@ public class AdminController {
                 rs.getLong("learner_count"), rs.getLong("attempt_count"),
                 rs.getLong("solved_count"), rs.getLong("correct_count")
         ));
+    }
+
+    @GetMapping("/problem-bank/overview")
+    public List<ProblemBankStatisticsResponse> problemBankOverview(HttpServletRequest request) {
+        adminAccessService.require(request);
+        return jdbcTemplate.query("""
+                SELECT s.id AS subject_id, s.code AS subject_code, s.name AS subject_name,
+                       q.difficulty,
+                       SUM(q.is_active = TRUE) AS active_count,
+                       SUM(q.is_active = FALSE) AS inactive_count,
+                       COUNT(*) AS total_count,
+                       MAX(q.created_at) AS last_created_at
+                  FROM subjects s
+             LEFT JOIN diagnosis_questions q ON q.subject_id = s.id
+                 GROUP BY s.id, s.code, s.name, q.difficulty
+                 ORDER BY s.name, FIELD(q.difficulty, 'BEGINNER', 'INTERMEDIATE', 'ADVANCED')
+                """, (rs, rowNum) -> new ProblemBankStatisticsResponse(
+                rs.getLong("subject_id"), rs.getString("subject_code"), rs.getString("subject_name"),
+                rs.getString("difficulty") == null ? "-" : rs.getString("difficulty"),
+                rs.getLong("active_count"), rs.getLong("inactive_count"), rs.getLong("total_count"),
+                timestampToLocalDateTime(rs.getTimestamp("last_created_at"))
+        ));
+    }
+
+    @GetMapping("/ai/operations")
+    public AiOperationStatisticsResponse aiOperations(HttpServletRequest request) {
+        adminAccessService.require(request);
+        AiOperationAggregate aggregate = jdbcTemplate.query("""
+                SELECT COUNT(*) AS request_count,
+                       SUM(generation_status IN ('SUCCEEDED', 'FALLBACK')) AS success_count,
+                       SUM(generation_status = 'FAILED') AS failed_count,
+                       COALESCE(AVG(latency_ms), 0) AS average_latency_ms,
+                       COALESCE(SUM(input_tokens + output_tokens), 0) AS total_tokens,
+                       SUM(request_type = 'QUESTION_DRAFT' AND generation_status = 'SUCCEEDED') AS question_runs
+                  FROM ai_generation_runs
+                 WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL 7 DAY
+                """, (rs, rowNum) -> new AiOperationAggregate(
+                rs.getLong("request_count"), rs.getLong("success_count"), rs.getLong("failed_count"),
+                rs.getLong("average_latency_ms"), rs.getLong("total_tokens"), rs.getLong("question_runs")
+        )).stream().findFirst().orElse(new AiOperationAggregate(0, 0, 0, 0, 0, 0));
+        List<AiFailureTypeResponse> failures = jdbcTemplate.query("""
+                SELECT COALESCE(error_code, 'UNKNOWN') AS error_code, COUNT(*) AS count
+                  FROM ai_generation_runs
+                 WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL 7 DAY
+                   AND generation_status IN ('FAILED', 'FALLBACK')
+                   AND error_code IS NOT NULL
+                 GROUP BY error_code
+                 ORDER BY count DESC, error_code
+                 LIMIT 10
+                """, (rs, rowNum) -> new AiFailureTypeResponse(rs.getString("error_code"), rs.getLong("count")));
+        return new AiOperationStatisticsResponse(
+                aggregate.requestCount(), aggregate.successCount(), aggregate.failedCount(),
+                aggregate.averageLatencyMs(), aggregate.totalTokens(), aggregate.questionRuns(), failures);
     }
 
     @GetMapping("/users/{userId}/learning")
@@ -547,6 +605,16 @@ public class AdminController {
     ) {}
 
     public record Counts(long total, long active, long locked, long withdrawn) {}
+
+    public record ProblemBankStatisticsResponse(long subjectId, String subjectCode, String subjectName,
+                                                String difficulty, long activeCount, long inactiveCount,
+                                                long totalCount, LocalDateTime lastCreatedAt) {}
+    public record AiOperationStatisticsResponse(long requestCount, long successCount, long failedCount,
+                                               long averageLatencyMs, long totalTokens, long questionRuns,
+                                               List<AiFailureTypeResponse> failures) {}
+    public record AiFailureTypeResponse(String errorCode, long count) {}
+    private record AiOperationAggregate(long requestCount, long successCount, long failedCount,
+                                        long averageLatencyMs, long totalTokens, long questionRuns) {}
 
     public record AdminUserResponse(
             long id,

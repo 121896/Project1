@@ -154,10 +154,13 @@ public class AiGenerationService {
         long runId = startRun(userId, context.subjectId(), "WEEKLY_INSIGHT", input);
         Instant startedAt = Instant.now();
         String systemPrompt = JSON_ONLY + "당신은 IT 학습 기록을 분석해 다음 학습을 추천하는 코치입니다. "
-                + "출력 키는 title, content, priority이며 priority는 1에서 5 사이의 정수입니다.";
+                + "출력 키는 title, content, priority이며 priority는 1에서 5 사이의 정수입니다. "
+                + "content는 실행 행동 3개를 줄바꿈으로 구분하고, 각 줄을 반드시 '1. ', '2. ', '3. '으로 시작하세요. "
+                + "첫째·둘째·셋째나 문단형 서술은 사용하지 마세요.";
         String userPrompt = "과목: %s\n수준: %s\n학습 기록: %s\n"
                 .formatted(context.subjectName(), context.learningLevel(), context.summary())
-                + "약 %d분 안에 수행할 수 있도록 취약점을 보완할 다음 학습 한 가지를 %s 방식의 구체적인 실행 방법과 함께 추천하세요."
+                + "약 %d분 안에 수행할 수 있도록 취약점을 보완할 다음 학습 한 가지를 %s 방식의 구체적인 실행 방법과 함께 추천하세요. "
+                + "content는 정확히 3줄, 각 줄은 1. / 2. / 3. 순서로 작성하세요."
                 .formatted(preference.availableMinutes(), styleLabel(preference.explanationStyle()));
         try {
             AiProviderResponse response = client.generateJson(systemPrompt, userPrompt, recommendationSchema());

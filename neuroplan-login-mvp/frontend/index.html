@@ -30,6 +30,26 @@
       --shadow: 0 18px 50px rgba(59, 100, 79, .14);
       --radius: 24px;
     }
+    body.dark-mode {
+      --navy: #d7f0df;
+      --ink: #e3f0e7;
+      --muted: #a7beb0;
+      --line: #365446;
+      --paper: #17251e;
+      --canvas: #0d1913;
+      --blue: #81b99b;
+      --blue-dark: #a6d4b8;
+      --blue-soft: #20392d;
+      --sky: #6fa38a;
+      --sky-soft: #1b3026;
+      --teal: #78b994;
+      --teal-soft: #203c2e;
+      --yellow: #e8c36a;
+      --yellow-soft: #413a20;
+      --orange-soft: #3d2f21;
+      --danger-soft: #452a29;
+      --shadow: 0 18px 50px rgba(0,0,0,.34);
+    }
 
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
@@ -48,6 +68,10 @@
       font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", Inter, system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
+    body.dark-mode { background: radial-gradient(circle at 6% 4%, rgba(72,125,94,.24), transparent 27rem), radial-gradient(circle at 95% 12%, rgba(173,138,52,.15), transparent 25rem), var(--canvas); }
+    body.dark-mode .topbar, body.dark-mode .category-nav { background: rgba(13,25,19,.94); }
+    body.dark-mode input, body.dark-mode select, body.dark-mode textarea { color: var(--ink); border-color: var(--line); background: #1c2c24; }
+    body.dark-mode .wrong-note-item, body.dark-mode .history-item, body.dark-mode .notification-item { background: #1a2a22; }
     button, input, select, textarea { font: inherit; }
     button { color: inherit; }
     button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
@@ -121,6 +145,7 @@
     [data-page-section].page-swipe-enter-right { animation: page-swipe-enter-right .28s ease-out both; }
     [data-page-section].page-swipe-enter-left { animation: page-swipe-enter-left .28s ease-out both; }
     .dashboard.home-rise-in { animation: dashboard-home-rise .42s cubic-bezier(.22,.8,.26,1) both; }
+    [data-page-section].page-refresh-rise { animation: page-refresh-rise .34s cubic-bezier(.22,.8,.26,1) both; }
     @keyframes page-swipe-enter-right {
       from { opacity: 0; transform: translateX(30px); }
       to { opacity: 1; transform: translateX(0); }
@@ -133,9 +158,40 @@
       from { opacity: 0; transform: translateY(42px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    @keyframes page-refresh-rise {
+      from { opacity: .35; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes notification-modal-rise {
+      from { opacity: 0; transform: translateY(28px) scale(.985); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes user-menu-drop {
+      from { opacity: 0; transform: translateY(-12px) scale(.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes reauth-modal-drop {
+      from { opacity: 0; transform: translateY(-28px) scale(.985); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes admin-page-enter {
+      from { opacity: 0; transform: translateY(26px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes modal-close-down {
+      from { opacity: 1; transform: translateY(0) scale(1); }
+      to { opacity: 0; transform: translateY(22px) scale(.985); }
+    }
     @media (prefers-reduced-motion: reduce) {
       [data-page-section].page-swipe-enter-right,
-      [data-page-section].page-swipe-enter-left { animation: none; }
+      [data-page-section].page-swipe-enter-left,
+      [data-page-section].page-refresh-rise,
+      #notificationModal:not([hidden]) .modal,
+      #profileModal:not([hidden]) .modal,
+      #reauthModal:not([hidden]) .modal,
+      .user-dropdown:not([hidden]),
+      #adminPage.admin-page-enter,
+      .modal-backdrop.modal-closing .modal { animation: none !important; }
     }
     .user-chip {
       min-height: 42px;
@@ -175,6 +231,7 @@
       background: var(--paper);
       box-shadow: 0 20px 48px rgba(47,86,72,.22);
     }
+    .user-dropdown:not([hidden]) { animation: user-menu-drop .2s cubic-bezier(.22,.8,.26,1) both; }
     .user-menu-item {
       width: 100%;
       min-height: 42px;
@@ -192,6 +249,11 @@
       text-align: left;
     }
     .user-menu-item:hover, .user-menu-item:focus-visible { background: var(--blue-soft); }
+    .theme-menu-item { justify-content: space-between; }
+    .theme-switch { width: 38px; height: 22px; padding: 3px; border-radius: 999px; display: inline-flex; align-items: center; background: #bdd5c5; transition: background .2s ease; }
+    .theme-switch::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(22,49,37,.28); transition: transform .2s cubic-bezier(.22,.8,.26,1); }
+    .theme-menu-item[aria-checked="true"] .theme-switch { background: var(--teal); }
+    .theme-menu-item[aria-checked="true"] .theme-switch::after { transform: translateX(16px); }
     .user-menu-item.danger-text { color: #a9584e; }
     .user-menu-divider { height: 1px; margin: 6px 4px; background: var(--line); }
     .user-menu-scrim { position: fixed; inset: 0; z-index: 39; background: transparent; }
@@ -647,6 +709,12 @@
       box-shadow: 0 28px 80px rgba(47,86,72,.25);
     }
     .modal.large { width: min(650px, 100%); }
+    .modal-backdrop.modal-closing { pointer-events: none; }
+    .modal-backdrop.modal-closing .modal { animation: modal-close-down .2s ease-in both !important; }
+    #notificationModal:not([hidden]) .modal { animation: notification-modal-rise .3s cubic-bezier(.22,.8,.26,1) both; }
+    #profileModal:not([hidden]) .modal { animation: notification-modal-rise .3s cubic-bezier(.22,.8,.26,1) both; }
+    #reauthModal:not([hidden]) .modal { animation: reauth-modal-drop .28s cubic-bezier(.22,.8,.26,1) both; }
+    #adminPage.admin-page-enter { animation: admin-page-enter .34s cubic-bezier(.22,.8,.26,1) both; }
     .modal-head { padding: 25px 25px 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
     .modal-head h2 { margin: 0; font-size: 22px; letter-spacing: -.045em; }
     .modal-head p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
@@ -881,6 +949,31 @@
     .delete-summary span { margin-top: 5px; color: #94635d; font-size: 11px; }
     .danger-note { margin: 0 0 16px; padding: 13px 14px; border-radius: 13px; color: #8e5049; background: var(--danger-soft); font-size: 12px; line-height: 1.55; }
 
+    /* 모든 학습 화면과 모달에서 밝은 고정색이 남지 않도록 다크 테마를 마지막에 덮습니다. */
+    body.dark-mode .topbar { background: rgba(13,25,19,.94); border-color: var(--line); }
+    body.dark-mode .category-nav { background: rgba(13,25,19,.94); border-color: var(--line); }
+    body.dark-mode .category-button.active, body.dark-mode .plan-subject-tab.active { color: var(--ink); border-color: #588269; }
+    body.dark-mode .button.secondary, body.dark-mode .button.ghost, body.dark-mode .page-refresh-button, body.dark-mode .notification-button { color: var(--ink); background: var(--blue-soft); border-color: var(--line); }
+    body.dark-mode .button.secondary:hover, body.dark-mode .button.ghost:hover, body.dark-mode .page-refresh-button:hover, body.dark-mode .notification-button:hover { background: #294936; }
+    body.dark-mode .ai-token-chip, body.dark-mode .notification-move-button { color: var(--ink); border-color: var(--line); background: #1b3327; }
+    body.dark-mode .ai-token-chip-label, body.dark-mode .notification-item time { color: var(--muted); }
+    body.dark-mode .ai-token-chip-track, body.dark-mode .subject-track, body.dark-mode .subject-stat-track, body.dark-mode .ai-quota-track { background: #294336; }
+    body.dark-mode .notification-item.unread, body.dark-mode .wrong-note-item.relearned, body.dark-mode .timeline-item.completed { border-color: #426a52; background: #20372a; }
+    body.dark-mode .wrong-note-answer, body.dark-mode .ai-feedback, body.dark-mode .ai-recommendation-result, body.dark-mode .plan-criteria-card, body.dark-mode .explanation { color: var(--ink); border-color: var(--line); background: #1b3025; }
+    body.dark-mode .wrong-note-answer strong, body.dark-mode .ai-feedback strong, body.dark-mode .ai-feedback p, body.dark-mode .ai-feedback ul, body.dark-mode .wrong-note-explanation, body.dark-mode .plan-step-content, body.dark-mode .plan-criteria-list li strong, body.dark-mode .plan-criteria-subjects, body.dark-mode .ai-recommendation-result p, body.dark-mode .ai-consent-note, body.dark-mode .check-field { color: var(--ink); }
+    body.dark-mode .filter-row select, body.dark-mode .plan-subject-tab, body.dark-mode .auth-tab.active, body.dark-mode .choice, body.dark-mode .level-choice, body.dark-mode .answer, body.dark-mode .subject-tag, body.dark-mode .plan-criteria-edit { color: var(--ink); border-color: var(--line); background: #1a2c23; }
+    body.dark-mode .auth-tabs, body.dark-mode .timeline-item, body.dark-mode .choice-levels, body.dark-mode .profile-summary { background: #1b3025; }
+    body.dark-mode .answer.selected, body.dark-mode .choice.selected, body.dark-mode .level-choice.selected { background: #294936; border-color: #56826a; }
+    body.dark-mode .heatmap-cell { background: #1d3026; }
+    body.dark-mode .heatmap-cell.level-1 { background: #31523f; }
+    body.dark-mode .heatmap-cell.level-2 { background: #49775d; }
+    body.dark-mode .heatmap-cell.level-3 { background: #6aab85; }
+    body.dark-mode .account-fact, body.dark-mode .weekly-summary-item { background: #1b3025; }
+    body.dark-mode .danger-zone { background: linear-gradient(180deg, var(--paper), #2d1e1d); }
+    body.dark-mode .admin-table th { background: #1b3025; }
+    body.dark-mode .modal-backdrop { background: rgba(0,0,0,.62); }
+    body.dark-mode .theme-switch { background: #4b5d51; }
+
     @media (max-width: 900px) {
       .hero { grid-template-columns: 1fr; }
       .main-grid { grid-template-columns: 1fr; }
@@ -968,6 +1061,7 @@
           </button>
           <div class="user-dropdown" id="userDropdown" role="menu" hidden>
             <button class="user-menu-item" type="button" role="menuitem" data-user-action="account">⚙ 계정 설정</button>
+            <button class="user-menu-item theme-menu-item" id="themeMenuItem" type="button" role="menuitemcheckbox" aria-checked="false" data-user-action="theme"><span>◐ 다크 모드</span><span class="theme-switch" aria-hidden="true"></span></button>
             <button class="user-menu-item" type="button" role="menuitem" data-user-action="sessions">◫ 전체 세션 로그아웃</button>
             <button class="user-menu-item" id="adminMenuItem" type="button" role="menuitem" data-user-action="admin" hidden>◆ 관리자 페이지</button>
             <div class="user-menu-divider" role="separator"></div>
@@ -989,6 +1083,13 @@
         <div class="notification-list" id="notificationList"></div>
         <button class="button secondary block" id="markNotificationsRead" type="button">모두 읽음 처리</button>
       </div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="questionReportModal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="questionReportTitle">
+      <div class="modal-head"><div><h2 id="questionReportTitle">문제 신고</h2><p>오류·애매한 보기·중복 문제를 알려주시면 검토 후 반영합니다.</p></div><button class="close-button" type="button" data-close="questionReportModal" aria-label="닫기">×</button></div>
+      <div class="modal-body"><form id="questionReportForm"><div class="field"><label for="questionReportType">신고 유형</label><select id="questionReportType"><option value="INCORRECT">문제 또는 정답 오류</option><option value="AMBIGUOUS">보기 또는 표현이 애매함</option><option value="DUPLICATE">중복 문제</option><option value="OTHER">기타</option></select></div><div class="field"><label for="questionReportDetail">상세 내용 (선택)</label><textarea id="questionReportDetail" maxlength="500" placeholder="검토에 도움이 되는 내용을 적어 주세요."></textarea></div><div class="form-message" id="questionReportMessage" role="alert"></div><button class="button primary block" type="submit">신고 보내기</button></form></div>
     </section>
   </div>
 
@@ -1192,7 +1293,7 @@
           <h3 class="question-title" id="questionText"></h3>
           <div class="answers" id="answerList"></div>
           <div class="explanation" id="explanation" hidden></div>
-          <div class="quiz-footer"><button class="button primary" id="nextQuestion" type="button" disabled>답안 제출</button></div>
+          <div class="quiz-footer"><button class="button primary" id="nextQuestion" type="button" disabled>답안 제출</button><button class="button ghost small" id="reportQuestionButton" type="button">문제 신고</button></div>
         </div>
       </section>
     </section>
@@ -1205,12 +1306,14 @@
       <div class="filter-row">
         <select id="wrongSubjectFilter" aria-label="오답 과목 필터"><option value="">전체 과목</option></select>
         <select id="wrongStatusFilter" aria-label="오답 상태 필터"><option value="pending">재학습 필요</option><option value="all">전체 상태</option><option value="done">재학습 완료</option></select>
+        <select id="wrongCountFilter" aria-label="누적 오답 횟수 필터"><option value="">전체 오답 횟수</option><option value="1">1회</option><option value="2">2회 이상</option><option value="3">3회 이상</option></select>
+        <button class="button secondary small" id="wrongRetryButton" type="button">오답만 다시 풀기</button>
       </div>
       <div class="wrong-note-list" id="wrongNoteList"><div class="empty-state"><div><strong>아직 쌓인 오답 노트가 없어요.</strong><span>문제 풀이 후 오답이 자동으로 기록됩니다.</span></div></div></div>
     </section>
 
     <section class="content-card page-title-card" data-page-section="history" hidden aria-labelledby="historyTitle">
-      <div class="card-head"><div><h2 id="historyTitle">학습 기록</h2><p>최근 30일 동안 과목별로 생성한 플랜과 완료 단계를 확인합니다.</p></div><button class="button secondary small" id="refreshHistory" type="button"><span class="button-icon" aria-hidden="true">↻</span><span>새로고침</span></button></div>
+      <div class="card-head"><div><h2 id="historyTitle">학습 기록</h2><p>최근 30일 동안 과목별로 생성한 플랜과 완료 단계를 확인합니다.</p></div></div>
       <div class="history-list" id="planHistoryList"><div class="empty-state"><div><strong>아직 학습 기록이 없습니다.</strong><span>플랜을 생성하면 날짜별 기록이 표시됩니다.</span></div></div></div>
     </section>
 
@@ -1267,6 +1370,16 @@
       <div class="card-head"><div><h2 id="adminSubjectStatsTitle">과목별 학습 통계</h2><p>선택 회원·풀이 수·누적 정답률을 확인합니다.</p></div></div>
       <div class="subject-stat-list" id="adminSubjectStats"><span class="metric-caption">통계를 불러오는 중입니다.</span></div>
     </section>
+    <section class="settings-grid page-title-card" aria-label="AI와 문제은행 운영 현황">
+      <article class="content-card">
+        <div class="card-head"><div><h2>문제은행 현황</h2><p>과목·난이도별 활성 문제와 최근 생성 시각을 확인합니다.</p></div></div>
+        <div class="history-list" id="adminProblemBankList"><span class="metric-caption">문제은행 현황을 불러오는 중입니다.</span></div>
+      </article>
+      <article class="content-card">
+        <div class="card-head"><div><h2>AI 운영 현황</h2><p>최근 7일 Gemini 요청·토큰·실패 유형을 확인합니다.</p></div></div>
+        <div id="adminAiOperations"><span class="metric-caption">AI 운영 현황을 불러오는 중입니다.</span></div>
+      </article>
+    </section>
     <section aria-labelledby="adminUsersTitle">
       <div class="card-head"><div><h2 id="adminUsersTitle">회원 검색·관리</h2><p>계정 상태를 변경하면 잠금·탈퇴 회원의 로그인 세션이 즉시 폐기됩니다.</p></div><button class="button secondary small" id="adminRefresh" type="button"><span class="button-icon" aria-hidden="true">↻</span><span>새로고침</span></button></div>
       <form class="filter-row" id="adminUserSearchForm">
@@ -1311,6 +1424,10 @@
         </form>
         <div class="history-list" id="adminQuestionList" style="margin-top:16px"></div>
       </article>
+    </section>
+    <section class="content-card" style="margin-top:22px" aria-labelledby="adminQuestionReportsTitle">
+      <div class="card-head"><div><h2 id="adminQuestionReportsTitle">문제 신고 관리</h2><p>오류·애매함·중복 신고를 확인하고 처리 상태를 기록합니다.</p></div></div>
+      <div class="history-list" id="adminQuestionReports"><span class="metric-caption">신고를 불러오는 중입니다.</span></div>
     </section>
   </main>
 

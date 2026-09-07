@@ -12,4 +12,4 @@ images:
     newTag: "bcd9154"
 
   - name: harbor.nplan.local:80/neuroplan/backend
-    newTag: "bcd9154"
+    newTag: "a707343"

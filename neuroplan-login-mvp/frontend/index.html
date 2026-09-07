@@ -99,7 +99,7 @@
     .category-nav-inner::-webkit-scrollbar { display: none; }
     .category-button { min-height: 37px; padding: 0 14px; border: 1px solid transparent; border-radius: 12px; color: var(--muted); background: transparent; cursor: pointer; font-size: 12px; font-weight: 800; white-space: nowrap; }
     .category-button.active { color: #315f4b; border-color: #bcd6c7; background: var(--teal-soft); }
-    .page-refresh-button { flex: 0 0 auto; margin-left: auto; }
+    .page-refresh-button { flex: 0 0 auto; min-height: 42px; padding: 0 14px; border-radius: 14px; margin-left: auto; }
     [data-page-section][hidden] { display: none !important; }
     [data-page-section].page-swipe-enter-right { animation: page-swipe-enter-right .28s ease-out both; }
     [data-page-section].page-swipe-enter-left { animation: page-swipe-enter-left .28s ease-out both; }
@@ -121,17 +121,17 @@
       [data-page-section].page-swipe-enter-left { animation: none; }
     }
     .user-chip {
-      min-height: 36px;
+      min-height: 42px;
       padding: 0 13px;
       border-radius: 14px;
       display: flex;
       align-items: center;
       gap: 8px;
-      background: #edf7f0;
+      background: var(--blue-soft);
       color: var(--blue-dark);
       font-size: 13px;
       font-weight: 800;
-      border: 1px solid #d3e5da;
+      border: 0;
       cursor: pointer;
     }
     .user-avatar {
@@ -216,7 +216,7 @@
     .ai-token-chip-track span { width: 0; height: 100%; display: block; border-radius: inherit; background: #3f896a; transition: width .25s ease; }
     .ai-token-chip.low .ai-token-chip-track span { background: #c99732; }
     .ai-token-chip.critical .ai-token-chip-track span { background: #c96459; }
-    .notification-button { position: relative; min-width: 72px; color: var(--navy); }
+    .notification-button { position: relative; min-width: 72px; min-height: 42px; padding: 0 14px; border-radius: 14px; color: var(--navy); }
     .notification-badge { position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; color: #fff; background: #c96459; font-size: 9px; line-height: 17px; text-align: center; }
     .notification-list { display: grid; gap: 9px; max-height: min(60vh, 440px); overflow: auto; }
     .notification-item { padding: 12px 13px; border: 1px solid var(--line); border-radius: 13px; background: #fbfefc; }

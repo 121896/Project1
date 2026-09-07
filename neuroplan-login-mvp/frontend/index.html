@@ -374,6 +374,9 @@
     .wrong-note-status { padding: 5px 8px; border-radius: 999px; color: #39705a; background: var(--teal-soft); font-size: 10px; font-weight: 900; white-space: nowrap; }
     .wrong-note-status.pending { color: #9e5148; background: var(--danger-soft); }
     .wrong-note-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .wrong-note-actions .ai-action-with-usage { align-items: flex-start; }
+    .wrong-note-actions .button.ghost { border-color: var(--line); color: var(--blue); }
+    .wrong-note-actions .button.ghost:hover { background: #f2f8f3; }
     .ai-feedback { margin-top: 13px; padding: 14px; border: 1px solid #bfd9c9; border-radius: 14px; background: #f0f8f3; }
     .ai-feedback strong { display: block; margin-bottom: 6px; color: #285844; font-size: 12px; }
     .ai-feedback p { margin: 0; color: #244438; font-size: 12px; line-height: 1.65; }
@@ -533,6 +536,9 @@
     .ai-quota-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #5c9e7e, #8bbda2); }
     .ai-quota-foot { margin-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 10px; }
     .ai-action-with-usage { display: inline-flex; align-items: center; flex-direction: column; gap: 5px; }
+    .quiz-launch-actions .ai-action-with-usage { min-width: 112px; }
+    .quiz-launch-actions .ai-action-with-usage .button,
+    .wrong-note-actions .ai-action-with-usage .button { min-height: 36px; }
     .ai-average-note { color: #5d776b; font-size: 9px; font-weight: 800; line-height: 1.25; white-space: nowrap; }
     .profile-ai-action { display: grid; gap: 6px; }
     .profile-ai-action .ai-average-note { text-align: center; }

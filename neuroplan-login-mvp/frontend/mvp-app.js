@@ -181,16 +181,16 @@
     if (!normalized) return '<p class="plan-step-summary">학습 내용을 준비하고 있습니다.</p>';
 
     const lines = normalized
-      // 목록 번호는 `1. `, `1) `, `① `처럼 마커 뒤에 공백이 있을 때만 인식한다.
+      // 목록 번호는 `1. `, `1) `, `① `, `1단계: ` 형식을 인식한다.
       // `8.8.8.8`, `1.1.1.1`, 버전 `1.35.4`는 숫자 목록이 아니므로 중간에서 나누지 않는다.
-      .replace(/[\s\u00a0]+(?=(?:\d{1,2}[.)]|[①-⑳])[\s\u00a0]+)/g, "\n")
+      .replace(/[\s\u00a0]+(?=(?:\d{1,2}단계(?:\s*\([^)]*\))?\s*[:.)-]?|\d{1,2}[.)]|[①-⑳])[\s\u00a0]*)/g, "\n")
       .split(/\n+/)
       .map(value => value.trim())
       .filter(Boolean);
     const intro = [];
     const actions = [];
     lines.forEach(line => {
-      const numbered = line.match(/^(?:\d{1,2}[.)]|[①-⑳])[\s\u00a0]+(.+)$/s);
+      const numbered = line.match(/^(?:\d{1,2}단계(?:\s*\([^)]*\))?\s*[:.)-]?|\d{1,2}[.)]|[①-⑳])[\s\u00a0]*(.+)$/s);
       if (numbered) actions.push(numbered[1].trim());
       else if (actions.length) actions[actions.length - 1] = `${actions[actions.length - 1]} ${line}`.trim();
       else intro.push(line);

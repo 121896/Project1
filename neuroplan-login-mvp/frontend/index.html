@@ -60,16 +60,13 @@
     body {
       margin: 0;
       min-width: 320px;
-      background:
-        radial-gradient(circle at 6% 4%, rgba(173,210,187,.34), transparent 27rem),
-        radial-gradient(circle at 95% 12%, rgba(237,206,126,.2), transparent 25rem),
-        var(--canvas);
+      background: var(--canvas);
       color: var(--ink);
       font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", Inter, system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
-    body.dark-mode { background: radial-gradient(circle at 6% 4%, rgba(72,125,94,.24), transparent 27rem), radial-gradient(circle at 95% 12%, rgba(173,138,52,.15), transparent 25rem), var(--canvas); }
-    body.dark-mode .topbar, body.dark-mode .category-nav { background: rgba(13,25,19,.94); }
+    body.dark-mode { background: var(--canvas); }
+    body.dark-mode .topbar, body.dark-mode .category-nav { background: var(--canvas); }
     body.dark-mode input, body.dark-mode select, body.dark-mode textarea { color: var(--ink); border-color: var(--line); background: #1c2c24; }
     body.dark-mode .wrong-note-item, body.dark-mode .history-item, body.dark-mode .notification-item { background: #1a2a22; }
     button, input, select, textarea { font: inherit; }
@@ -90,7 +87,7 @@
       /* Keep the user menu above its full-screen click-away scrim (z-index: 39). */
       z-index: 40;
       border-bottom: 1px solid rgba(213,228,218,.94);
-      background: rgba(255,254,250,.92);
+      background: var(--canvas);
       backdrop-filter: blur(14px);
     }
     .topbar-inner {
@@ -126,7 +123,7 @@
     .top-actions { display: flex; align-items: center; gap: 10px; }
     .button-icon { display: inline-grid; place-items: center; width: 16px; height: 16px; font-size: 14px; line-height: 1; }
     .notification-button, .page-refresh-button { gap: 6px; }
-    .category-nav { position: sticky; top: 72px; z-index: 19; border-bottom: 1px solid var(--line); background: rgba(247,251,248,.94); backdrop-filter: blur(14px); }
+    .category-nav { position: sticky; top: 72px; z-index: 19; border-bottom: 1px solid var(--line); background: var(--canvas); backdrop-filter: blur(14px); }
     .category-nav-inner { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 10px 0; display: flex; align-items: center; gap: 7px; overflow-x: auto; scrollbar-width: none; }
     .category-nav-inner::-webkit-scrollbar { display: none; }
     .category-button { min-height: 37px; padding: 0 14px; border: 1px solid transparent; border-radius: 12px; color: var(--muted); background: transparent; cursor: pointer; font-size: 12px; font-weight: 800; white-space: nowrap; }
@@ -955,8 +952,8 @@
     .danger-note { margin: 0 0 16px; padding: 13px 14px; border-radius: 13px; color: #8e5049; background: var(--danger-soft); font-size: 12px; line-height: 1.55; }
 
     /* 모든 학습 화면과 모달에서 밝은 고정색이 남지 않도록 다크 테마를 마지막에 덮습니다. */
-    body.dark-mode .topbar { background: rgba(13,25,19,.94); border-color: var(--line); }
-    body.dark-mode .category-nav { background: rgba(13,25,19,.94); border-color: var(--line); }
+    body.dark-mode .topbar { background: var(--canvas); border-color: var(--line); }
+    body.dark-mode .category-nav { background: var(--canvas); border-color: var(--line); }
     body.dark-mode .category-button.active, body.dark-mode .plan-subject-tab.active { color: var(--ink); border-color: #588269; }
     body.dark-mode .button.secondary, body.dark-mode .button.ghost, body.dark-mode .page-refresh-button, body.dark-mode .notification-button { color: var(--ink); background: var(--blue-soft); border-color: var(--line); }
     body.dark-mode .button.secondary:hover, body.dark-mode .button.ghost:hover, body.dark-mode .page-refresh-button:hover, body.dark-mode .notification-button:hover { background: #294936; }

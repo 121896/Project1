@@ -406,7 +406,17 @@
     showLearningShell();
     activePage = "dashboard";
     showPage("dashboard");
+    playHomeMotion();
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function playHomeMotion() {
+    const dashboard = $("#dashboard");
+    dashboard.classList.remove("home-rise-in");
+    // 애니메이션을 재실행해 다른 화면에서 홈으로 돌아올 때도 동일하게 보입니다.
+    void dashboard.offsetWidth;
+    dashboard.classList.add("home-rise-in");
+    setTimeout(() => dashboard.classList.remove("home-rise-in"), 460);
   }
 
   function showLearningShell() {

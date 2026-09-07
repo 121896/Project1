@@ -92,6 +92,8 @@
     }
     .brand-mark img { width: 100%; height: 100%; object-fit: cover; display: block; transform: scale(1.22); }
     .top-actions { display: flex; align-items: center; gap: 10px; }
+    .button-icon { display: inline-grid; place-items: center; width: 16px; height: 16px; font-size: 14px; line-height: 1; }
+    .notification-button, .page-refresh-button { gap: 6px; }
     .category-nav { position: sticky; top: 72px; z-index: 19; border-bottom: 1px solid var(--line); background: rgba(247,251,248,.94); backdrop-filter: blur(14px); }
     .category-nav-inner { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 10px 0; display: flex; align-items: center; gap: 7px; overflow-x: auto; scrollbar-width: none; }
     .category-nav-inner::-webkit-scrollbar { display: none; }
@@ -101,6 +103,7 @@
     [data-page-section][hidden] { display: none !important; }
     [data-page-section].page-swipe-enter-right { animation: page-swipe-enter-right .28s ease-out both; }
     [data-page-section].page-swipe-enter-left { animation: page-swipe-enter-left .28s ease-out both; }
+    .dashboard.home-rise-in { animation: dashboard-home-rise .42s cubic-bezier(.22,.8,.26,1) both; }
     @keyframes page-swipe-enter-right {
       from { opacity: 0; transform: translateX(30px); }
       to { opacity: 1; transform: translateX(0); }
@@ -108,6 +111,10 @@
     @keyframes page-swipe-enter-left {
       from { opacity: 0; transform: translateX(-30px); }
       to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes dashboard-home-rise {
+      from { opacity: 0; transform: translateY(42px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     @media (prefers-reduced-motion: reduce) {
       [data-page-section].page-swipe-enter-right,
@@ -916,7 +923,7 @@
           <span class="ai-token-chip-label">오늘의 AI 토큰</span><strong id="aiTokenChipValue">- / -</strong>
           <span class="ai-token-chip-track" role="progressbar" aria-label="오늘 남은 AI 토큰" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="확인할 수 없음"><span id="aiTokenChipBar"></span></span>
         </span>
-        <button class="button ghost small notification-button" id="notificationButton" type="button" aria-label="알림" aria-controls="notificationModal" hidden>알림<span class="notification-badge" id="notificationBadge" hidden>0</span></button>
+        <button class="button ghost small notification-button" id="notificationButton" type="button" aria-label="알림" aria-controls="notificationModal" hidden><span class="button-icon" aria-hidden="true">🔔</span><span>알림</span><span class="notification-badge" id="notificationBadge" hidden>0</span></button>
         <div class="user-menu" id="userMenu" hidden>
           <button class="user-chip" id="userMenuButton" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="userDropdown">
             <span class="user-avatar" id="userInitial">김</span>
@@ -956,7 +963,7 @@
       <button class="category-button" type="button" data-page="quiz">문제 풀이</button>
       <button class="category-button" type="button" data-page="wrong">오답 노트</button>
       <button class="category-button" type="button" data-page="history">학습 기록</button>
-      <button class="button ghost small page-refresh-button" id="refreshCurrentPage" type="button" disabled>새로고침</button>
+      <button class="button ghost small page-refresh-button" id="refreshCurrentPage" type="button" disabled><span class="button-icon" aria-hidden="true">↻</span><span>새로고침</span></button>
     </div>
   </nav>
 
@@ -1168,7 +1175,7 @@
     </section>
 
     <section class="content-card page-title-card" data-page-section="history" hidden aria-labelledby="historyTitle">
-      <div class="card-head"><div><h2 id="historyTitle">학습 기록</h2><p>최근 30일 동안 과목별로 생성한 플랜과 완료 단계를 확인합니다.</p></div><button class="button ghost small" id="refreshHistory" type="button">새로고침</button></div>
+      <div class="card-head"><div><h2 id="historyTitle">학습 기록</h2><p>최근 30일 동안 과목별로 생성한 플랜과 완료 단계를 확인합니다.</p></div><button class="button ghost small" id="refreshHistory" type="button"><span class="button-icon" aria-hidden="true">↻</span><span>새로고침</span></button></div>
       <div class="history-list" id="planHistoryList"><div class="empty-state"><div><strong>아직 학습 기록이 없습니다.</strong><span>플랜을 생성하면 날짜별 기록이 표시됩니다.</span></div></div></div>
     </section>
 
@@ -1226,7 +1233,7 @@
       <div class="subject-stat-list" id="adminSubjectStats"><span class="metric-caption">통계를 불러오는 중입니다.</span></div>
     </section>
     <section aria-labelledby="adminUsersTitle">
-      <div class="card-head"><div><h2 id="adminUsersTitle">회원 검색·관리</h2><p>계정 상태를 변경하면 잠금·탈퇴 회원의 로그인 세션이 즉시 폐기됩니다.</p></div><button class="button ghost small" id="adminRefresh" type="button">새로고침</button></div>
+      <div class="card-head"><div><h2 id="adminUsersTitle">회원 검색·관리</h2><p>계정 상태를 변경하면 잠금·탈퇴 회원의 로그인 세션이 즉시 폐기됩니다.</p></div><button class="button ghost small" id="adminRefresh" type="button"><span class="button-icon" aria-hidden="true">↻</span><span>새로고침</span></button></div>
       <form class="filter-row" id="adminUserSearchForm">
         <input id="adminUserQuery" type="search" placeholder="이메일 또는 닉네임 검색">
         <select id="adminUserStatus"><option value="">전체 상태</option><option value="ACTIVE">ACTIVE</option><option value="LOCKED">LOCKED</option><option value="WITHDRAWN">WITHDRAWN</option></select>

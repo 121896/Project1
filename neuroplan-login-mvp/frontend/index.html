@@ -121,17 +121,17 @@
       [data-page-section].page-swipe-enter-left { animation: none; }
     }
     .user-chip {
-      min-height: 42px;
+      min-height: 36px;
       padding: 0 13px;
       border-radius: 14px;
       display: flex;
       align-items: center;
       gap: 8px;
-      background: var(--blue-soft);
+      background: #edf7f0;
       color: var(--blue-dark);
       font-size: 13px;
       font-weight: 800;
-      border: 0;
+      border: 1px solid #d3e5da;
       cursor: pointer;
     }
     .user-avatar {
@@ -216,7 +216,7 @@
     .ai-token-chip-track span { width: 0; height: 100%; display: block; border-radius: inherit; background: #3f896a; transition: width .25s ease; }
     .ai-token-chip.low .ai-token-chip-track span { background: #c99732; }
     .ai-token-chip.critical .ai-token-chip-track span { background: #c96459; }
-    .notification-button { position: relative; }
+    .notification-button { position: relative; min-width: 72px; color: var(--navy); }
     .notification-badge { position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; color: #fff; background: #c96459; font-size: 9px; line-height: 17px; text-align: center; }
     .notification-list { display: grid; gap: 9px; max-height: min(60vh, 440px); overflow: auto; }
     .notification-item { padding: 12px 13px; border: 1px solid var(--line); border-radius: 13px; background: #fbfefc; }
@@ -861,7 +861,7 @@
       .brand-mark { width: 36px; height: 36px; border-radius: 11px; }
       .top-actions { gap: 4px; }
       .category-nav { top: 64px; }
-      .top-actions .button.secondary { display: none; }
+      .top-actions #resetDemo { display: none; }
       .hero { padding: 26px 21px; border-radius: 24px; }
       .hero h1 { font-size: 31px; }
       .content-card { padding: 19px; }

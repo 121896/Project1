@@ -37,6 +37,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Controller;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -127,6 +128,54 @@ public class AiFeatureController {
                 user.id(), generated.generationRunId(), "AI 문제 저장 실패 환불",
                 () -> saveQuizQuestions(focus, generated));
         return new AiQuizResponse(generated.generationRunId(), generated.fallback(), questions, generated.quota());
+    }
+
+    /** A disabled-by-default, one-subject-per-run problem-bank replenisher. */
+    @Scheduled(fixedDelayString = "${app.ai.problem-bank-refill-interval-ms:300000}")
+    public void replenishProblemBank() {
+        try {
+            List<ProblemBankSetting> settings = jdbcTemplate.query("""
+                    SELECT owner_user_id, target_count
+                      FROM ai_problem_bank_settings
+                     WHERE id = 1 AND is_enabled = TRUE AND owner_user_id IS NOT NULL
+                    """, (rs, rowNum) -> new ProblemBankSetting(
+                    rs.getLong("owner_user_id"), rs.getInt("target_count")));
+            if (settings.isEmpty()) return;
+            ProblemBankSetting setting = settings.getFirst();
+            List<ProfileSubject> subjects = jdbcTemplate.query("""
+                    SELECT us.subject_id, s.code, s.name, us.learning_level
+                      FROM user_subjects us JOIN subjects s ON s.id = us.subject_id
+                     WHERE us.user_id = ? AND s.is_active = TRUE ORDER BY us.slot_no
+                    """, (rs, rowNum) -> new ProfileSubject(
+                    rs.getLong("subject_id"), rs.getString("code"), rs.getString("name"),
+                    levelLabel(rs.getString("learning_level"))), setting.ownerUserId());
+            for (ProfileSubject subject : subjects) {
+                Integer count = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*) FROM diagnosis_questions WHERE subject_id = ? AND is_active = TRUE
+                        """, Integer.class, subject.subjectId());
+                if (count != null && count >= setting.targetCount()) continue;
+                QuizGeneration generated = generationService.generateQuiz(
+                        setting.ownerUserId(), subject.subjectId(), subject.subjectName(), subject.levelLabel());
+                persistAiResult(setting.ownerUserId(), generated.generationRunId(), "문제은행 자동 보충 저장 실패 환불",
+                        () -> saveQuizQuestions(subject, generated));
+                jdbcTemplate.update("""
+                        UPDATE ai_problem_bank_settings
+                           SET last_run_at = CURRENT_TIMESTAMP(6), last_error = NULL, updated_at = CURRENT_TIMESTAMP(6)
+                         WHERE id = 1
+                        """);
+                log.info("AI problem bank replenished: subjectId={}, runId={}", subject.subjectId(), generated.generationRunId());
+                return;
+            }
+        } catch (RuntimeException error) {
+            log.warn("AI problem bank replenishment skipped: {}", error.getMessage());
+            try {
+                jdbcTemplate.update("""
+                        UPDATE ai_problem_bank_settings SET last_error = ?, updated_at = CURRENT_TIMESTAMP(6) WHERE id = 1
+                        """, error.getMessage() == null ? "자동 보충 중 알 수 없는 오류" : error.getMessage());
+            } catch (RuntimeException ignored) {
+                log.debug("Unable to store problem bank replenishment error", ignored);
+            }
+        }
     }
 
     @PostMapping("/questions/{runId}/check")
@@ -251,6 +300,11 @@ public class AiFeatureController {
                 ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP(6))
                 """, planId, generated.generationRunId(), generated.content().rationale(),
                 criteriaJson(focus, generated.fallback()));
+        jdbcTemplate.update("""
+                INSERT INTO user_active_plans (user_id, subject_id, plan_id, selected_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP(6))
+                ON DUPLICATE KEY UPDATE plan_id = VALUES(plan_id), selected_at = VALUES(selected_at)
+                """, userId, focus.subjectId(), planId);
         return planId;
     }
 
@@ -569,6 +623,7 @@ public class AiFeatureController {
                                           java.time.Instant createdAt) {}
     private record StoredQuestionOption(long questionId, String difficulty, String questionText,
                                         int optionNo, String optionText, boolean correct) {}
+    private record ProblemBankSetting(long ownerUserId, int targetCount) {}
     private static final class DuplicateQuestionException extends RuntimeException {
         private DuplicateQuestionException(String message) { super(message); }
     }

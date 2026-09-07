@@ -475,11 +475,77 @@ LIMIT 10;
 | GET | `/api/learning/diagnosis/questions` | 선택 과목 5문제 조회 |
 | POST | `/api/learning/diagnosis/check` | 한 문제 정답·해설 확인 |
 | POST | `/api/learning/diagnosis/attempts` | 풀이·오답·일별 통계 저장 |
+| GET | `/api/learning/wrong-notes/questions` | 미해결 오답만 다시 풀 문제 조회 |
+| GET / PUT | `/api/learning/plans/{id}` / `/select` | 플랜 상세 비교 / 현재 플랜으로 선택 |
+| GET / POST / PATCH | `/api/notifications` | 알림 조회·저장·읽음 상태 유지 |
+| POST | `/api/learning/questions/{id}/reports` | 문제 오류·애매함·중복 신고 |
 | GET | `/api/admin/overview` | 관리자용 회원·과목·오늘 플랜·진단 요약 |
+| GET | `/api/admin/problem-bank/overview` | 과목·난이도별 문제은행 현황 |
+| GET | `/api/admin/ai/operations` | 최근 AI 요청·토큰·실패 유형 운영 현황 |
+| GET / PATCH | `/api/admin/question-reports` | 문제 신고 확인·처리 |
 | PATCH | `/api/admin/users/{id}/status` | 관리자용 ACTIVE/LOCKED/WITHDRAWN 상태 변경 |
 | DELETE | `/api/admin/users/{id}` | 재인증한 관리자의 WITHDRAWN 사용자 영구 삭제 |
 | GET | `/api/health` | API 상태 |
 | GET | `/api/db-health` | MaxScale/MariaDB 상태 |
+
+## DB 담당자 적용 절차 — 학습 운영 기능
+
+아래 작업은 애플리케이션 계정이 아닌 **DB Primary의 DBA 계정**으로 진행합니다. Replica에서 직접 실행하지 않고, Primary 반영 뒤 복제 상태를 확인합니다. API Key·DB 비밀번호·JWT Secret은 어떤 경우에도 SQL 파일이나 Git에 넣지 않습니다.
+
+1. 적용 전 백업과 현재 복제 상태를 확인합니다.
+
+```bash
+mariadb-dump --no-defaults --single-transaction --routines --triggers infraready > /safe/backup/infraready-before-learning-ops.sql
+```
+
+```sql
+SHOW REPLICA STATUS\G
+```
+
+2. AI 문제 중복 방지 컬럼이 아직 없다면 먼저 `db/03-add-question-content-hash.sql`을 적용합니다. 이미 적용했으면 건너뜁니다.
+
+3. 이어서 `db/04-add-learning-operations-features.sql`을 **한 번만** 적용합니다. 이 파일은 다음을 만듭니다.
+
+   - 로그인 기기 간에도 유지되는 읽음 상태용 `user_notifications`
+   - 문제 오류·중복 신고용 `question_reports`
+   - 기본 비활성 상태의 문제은행 자동 보충 설정 `ai_problem_bank_settings`
+   - 사용자가 고른 플랜을 유지하는 `user_active_plans`
+
+```bash
+mariadb --no-defaults --protocol=TCP -h <PRIMARY_HOST> -P <PORT> -u <DBA_USER> -p infraready \
+  < neuroplan-login-mvp/db/04-add-learning-operations-features.sql
+```
+
+4. 적용을 확인합니다.
+
+```sql
+SHOW TABLES LIKE 'user_notifications';
+SHOW TABLES LIKE 'question_reports';
+SHOW TABLES LIKE 'ai_problem_bank_settings';
+SHOW TABLES LIKE 'user_active_plans';
+
+SELECT id, is_enabled, owner_user_id, low_water_mark, target_count, last_run_at, last_error
+FROM ai_problem_bank_settings;
+
+SHOW REPLICA STATUS\G
+```
+
+`Slave_IO_Running`과 `Slave_SQL_Running`은 `Yes`, `Seconds_Behind_Master`는 안정화 후 `0`인지 확인합니다.
+
+5. 자동 보충은 기본값이 `is_enabled=0`이므로 적용 직후에는 Gemini 호출이 발생하지 않습니다. 운영자가 AI 동의를 완료하고 일일 토큰 한도가 충분한 관리자 계정 ID를 정한 후에만 아래처럼 활성화합니다. 자동 보충은 5분마다 한 과목씩 확인하며, 활성 문제 수가 `target_count`보다 적을 때 5문제 단위로 보충합니다.
+
+```sql
+UPDATE ai_problem_bank_settings
+SET is_enabled = 1,
+    owner_user_id = <AI_동의_완료한_운영자_USER_ID>,
+    low_water_mark = 20,
+    target_count = 30,
+    last_error = NULL,
+    updated_at = CURRENT_TIMESTAMP(6)
+WHERE id = 1;
+```
+
+자동 보충을 즉시 멈추려면 `UPDATE ai_problem_bank_settings SET is_enabled = 0 WHERE id = 1;`을 실행합니다.
 
 회원가입 요청:
 

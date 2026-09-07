@@ -264,6 +264,25 @@ public class LearningController {
         ), user.id(), days - 1);
     }
 
+    @GetMapping("/plans/{planId}")
+    public PlanResponse planDetail(@PathVariable long planId, HttpServletRequest request) {
+        UserRecord user = currentUserService.require(request);
+        return planById(user.id(), planId);
+    }
+
+    @PutMapping("/plans/{planId}/select")
+    @Transactional
+    public PlanResponse selectPlan(@PathVariable long planId, HttpServletRequest request) {
+        UserRecord user = currentUserService.require(request);
+        PlanOwner owner = planOwner(planId, user.id());
+        jdbcTemplate.update("""
+                INSERT INTO user_active_plans (user_id, subject_id, plan_id, selected_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP(6))
+                ON DUPLICATE KEY UPDATE plan_id = VALUES(plan_id), selected_at = VALUES(selected_at)
+                """, user.id(), owner.subjectId(), planId);
+        return planById(user.id(), planId);
+    }
+
     @PatchMapping("/plans/{planId}/steps/{stepNo}")
     @Transactional
     public PlanResponse updateStep(
@@ -370,6 +389,34 @@ public class LearningController {
         return result;
     }
 
+    @GetMapping("/wrong-notes/questions")
+    public List<QuestionResponse> wrongNoteQuestions(@RequestParam String subjectCode, HttpServletRequest request) {
+        UserRecord user = currentUserService.require(request);
+        String code = subjectCode.trim().toUpperCase(Locale.ROOT);
+        return jdbcTemplate.query("""
+                SELECT q.id, q.question_no, q.difficulty, q.question_text, s.code, s.name
+                  FROM wrong_notes wn
+                  JOIN diagnosis_questions q ON q.id = wn.question_id
+                  JOIN subjects s ON s.id = q.subject_id
+                  JOIN (
+                    SELECT question_id, COUNT(*) AS option_count,
+                           SUM(CASE WHEN is_correct = TRUE THEN 1 ELSE 0 END) AS correct_count
+                      FROM question_options GROUP BY question_id
+                  ) option_stats ON option_stats.question_id = q.id
+                 WHERE wn.user_id = ? AND wn.is_relearned = FALSE AND s.code = ?
+                   AND q.is_active = TRUE AND option_stats.option_count >= 2 AND option_stats.correct_count = 1
+                 ORDER BY wn.last_wrong_at DESC, q.question_no DESC LIMIT ?
+                """, (rs, rowNum) -> {
+            long questionId = rs.getLong("id");
+            List<OptionResponse> options = jdbcTemplate.query("""
+                    SELECT id, option_no, option_text FROM question_options WHERE question_id = ? ORDER BY option_no
+                    """, (optionRs, optionRow) -> new OptionResponse(
+                    optionRs.getLong("id"), optionRs.getInt("option_no"), optionRs.getString("option_text")), questionId);
+            return new QuestionResponse(questionId, rs.getInt("question_no"), rs.getString("difficulty"),
+                    rs.getString("question_text"), rs.getString("code"), rs.getString("name"), options);
+        }, user.id(), code, DIAGNOSIS_QUESTION_COUNT);
+    }
+
     @PostMapping("/diagnosis/check")
     public AnswerCheckResponse checkAnswer(
             @Valid @RequestBody AnswerCheckRequest body,
@@ -386,8 +433,10 @@ public class LearningController {
             HttpServletRequest request
     ) {
         UserRecord user = currentUserService.require(request);
-        if (body.answers() == null || body.answers().size() < 5 || body.answers().size() > 10) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "진단 답안은 5개 이상 10개 이하로 제출해 주세요.");
+        String attemptType = "RELEARN".equalsIgnoreCase(body.attemptType()) ? "RELEARN" : "DIAGNOSTIC";
+        int minimumAnswers = "RELEARN".equals(attemptType) ? 1 : 5;
+        if (body.answers() == null || body.answers().size() < minimumAnswers || body.answers().size() > 10) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "RELEARN은 1개 이상, 일반 진단은 5개 이상 답안을 제출해 주세요.");
         }
         String code = body.subjectCode().trim().toUpperCase(Locale.ROOT);
         SubjectResponse subject = findActiveSubject(code);
@@ -410,9 +459,9 @@ public class LearningController {
                 INSERT INTO diagnosis_attempts (
                     user_id, subject_id, attempt_type, attempt_status,
                     total_questions, correct_answers, started_at, completed_at
-                ) VALUES (?, ?, 'DIAGNOSTIC', 'COMPLETED', ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, 'COMPLETED', ?, ?, ?, ?)
                 """,
-                user.id(), subject.id(), resolved.size(), correctCount,
+                user.id(), subject.id(), attemptType, resolved.size(), correctCount,
                 Timestamp.valueOf(completedAt.minusSeconds(1)),
                 Timestamp.valueOf(completedAt)
         );
@@ -484,6 +533,10 @@ public class LearningController {
     }
 
     private PlanResponse todayPlan(long userId, long subjectId) {
+        List<Long> selected = jdbcTemplate.query("""
+                SELECT plan_id FROM user_active_plans WHERE user_id = ? AND subject_id = ?
+                """, (rs, rowNum) -> rs.getLong("plan_id"), userId, subjectId);
+        if (!selected.isEmpty()) return planById(userId, selected.getFirst());
         List<PlanRow> rows = jdbcTemplate.query("""
                 SELECT dp.id, dp.title, dp.plan_status, dp.subject_id, s.code, s.name
                   FROM daily_plans dp
@@ -502,7 +555,21 @@ public class LearningController {
                 rs.getString("name")
         ), userId, subjectId);
         if (rows.isEmpty()) return null;
-        PlanRow plan = rows.getFirst();
+        return planResponse(rows.getFirst());
+    }
+
+    private PlanResponse planById(long userId, long planId) {
+        PlanRow plan = jdbcTemplate.query("""
+                SELECT dp.id, dp.title, dp.plan_status, dp.subject_id, s.code, s.name
+                  FROM daily_plans dp JOIN subjects s ON s.id = dp.subject_id
+                 WHERE dp.id = ? AND dp.user_id = ?
+                """, (rs, rowNum) -> new PlanRow(rs.getLong("id"), rs.getString("title"),
+                rs.getString("plan_status"), rs.getLong("subject_id"), rs.getString("code"), rs.getString("name")),
+                planId, userId).stream().findFirst().orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "플랜을 찾을 수 없습니다."));
+        return planResponse(plan);
+    }
+
+    private PlanResponse planResponse(PlanRow plan) {
         List<PlanStepResponse> steps = jdbcTemplate.query("""
                 SELECT id, step_no, title, content, step_status, completed_at
                   FROM plan_steps
@@ -990,7 +1057,8 @@ public class LearningController {
 
     public record AttemptRequest(
             @NotBlank String subjectCode,
-            @NotNull @Size(min = 5, max = 10) List<@Valid AttemptAnswerRequest> answers
+            String attemptType,
+            @NotNull @Size(min = 1, max = 10) List<@Valid AttemptAnswerRequest> answers
     ) {}
 
     public record AttemptAnswerRequest(long questionId, long selectedOptionId) {}

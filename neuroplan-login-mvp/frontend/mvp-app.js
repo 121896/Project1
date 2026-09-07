@@ -3,6 +3,7 @@
 
   const storageKey = "neuroplan-mvp-demo-v2";
   const sessionHintKey = "neuroplan-session-hint-v1";
+  const themeStorageKey = "neuroplan-theme";
   const apiConfig = { enabled: false, baseUrl: "/api", ...(window.NEUROPLAN_API || {}) };
   const fallbackSubjects = [
     { id: 1, code: "LINUX", name: "Linux" },
@@ -95,6 +96,15 @@
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+
+  function applyTheme(darkMode) {
+    document.body.classList.toggle("dark-mode", darkMode);
+    localStorage.setItem(themeStorageKey, darkMode ? "dark" : "light");
+    const themeButton = $("#themeMenuItem");
+    if (themeButton) themeButton.setAttribute("aria-checked", String(darkMode));
+  }
+
+  applyTheme(localStorage.getItem(themeStorageKey) === "dark");
   const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, character => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
   })[character]);
@@ -119,11 +129,16 @@
   let adminSubjects = [];
   let adminSubjectStats = [];
   let adminQuestions = [];
+  let adminProblemBank = [];
+  let adminAiOperations = null;
+  let adminQuestionReports = [];
+  const planHistoryDetails = new Map();
   let adminUserPage = { content: [], totalElements: 0, page: 0, size: 20 };
   let adminPageIndex = 0;
   const adminPageSize = 20;
   let editingAdminQuestionId = null;
   let adminDeleteTarget = null;
+  let reportQuestionId = null;
   let accountDetails = null;
   let accountDirty = false;
   const routedPages = new Set(["dashboard", "plan", "quiz", "wrong", "history"]);
@@ -138,6 +153,7 @@
   let loadingMinimumDurationMs = 0;
   let toastActionHandler = null;
   const modalFocusOrigins = new Map();
+  const modalCloseTimers = new Map();
   let refreshSessionPromise = null;
   let pageRefreshInFlight = false;
   const aiLoadingMinDurationMs = 800;
@@ -201,14 +217,14 @@
     const lines = normalized
       // 목록 번호는 `1. `, `1) `, `① `, `1단계: ` 형식을 인식한다.
       // `8.8.8.8`, `1.1.1.1`, 버전 `1.35.4`는 숫자 목록이 아니므로 중간에서 나누지 않는다.
-      .replace(/[\s\u00a0]+(?=(?:\d{1,2}단계(?:\s*\([^)]*\))?\s*[:.)-]?|\d{1,2}[.)]|[①-⑳])[\s\u00a0]*)/g, "\n")
+      .replace(/[\s\u00a0]+(?=(?:\d{1,2}단계(?:\s*\([^)]*\))?\s*[:.)-]?|\d{1,2}[.)]|[①-⑳]|(?:첫째|둘째|셋째|넷째|다섯째)\s*[:.)-]?)[\s\u00a0]*)/g, "\n")
       .split(/\n+/)
       .map(value => value.trim())
       .filter(Boolean);
     const intro = [];
     const actions = [];
     lines.forEach(line => {
-      const numbered = line.match(/^(?:\d{1,2}단계(?:\s*\([^)]*\))?\s*[:.)-]?|\d{1,2}[.)]|[①-⑳])[\s\u00a0]*(.+)$/s);
+      const numbered = line.match(/^(?:\d{1,2}단계(?:\s*\([^)]*\))?\s*[:.)-]?|\d{1,2}[.)]|[①-⑳]|(?:첫째|둘째|셋째|넷째|다섯째)\s*[:.)-]?)[\s\u00a0]*(.+)$/s);
       if (numbered) actions.push(numbered[1].trim());
       else if (actions.length) actions[actions.length - 1] = `${actions[actions.length - 1]} ${line}`.trim();
       else intro.push(line);
@@ -307,6 +323,9 @@
       setTimeout(clearAuthFields, 0);
     }
     const modal = document.getElementById(id);
+    clearTimeout(modalCloseTimers.get(id));
+    modalCloseTimers.delete(id);
+    modal.classList.remove("modal-closing");
     modalFocusOrigins.set(id, document.activeElement);
     modal.hidden = false;
     const firstInput = modal.querySelector("button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])");
@@ -314,25 +333,42 @@
   }
 
   function closeModal(id) {
-    document.getElementById(id).hidden = true;
-    if (id === "authModal") clearAuthFields();
-    if (id === "reauthModal") {
-      $("#reauthForm").reset();
-      $("#reauthMessage").textContent = "";
-      pendingSecureAction = null;
+    const modal = document.getElementById(id);
+    if (modal.hidden || modal.classList.contains("modal-closing")) return;
+    const finish = () => {
+      modal.classList.remove("modal-closing");
+      modal.hidden = true;
+      modalCloseTimers.delete(id);
+      if (id === "authModal") clearAuthFields();
+      if (id === "reauthModal") {
+        $("#reauthForm").reset();
+        $("#reauthMessage").textContent = "";
+        pendingSecureAction = null;
+      }
+      if (id === "adminDeleteModal") {
+        $("#adminDeleteForm").reset();
+        $("#adminDeleteMessage").textContent = "";
+        adminDeleteTarget = null;
+      }
+      if (id === "aiConsentModal") {
+        $("#aiConsentMessage").textContent = "";
+        pendingAiAction = null;
+      }
+      if (id === "questionReportModal") {
+        $("#questionReportForm").reset();
+        $("#questionReportMessage").textContent = "";
+        reportQuestionId = null;
+      }
+      const origin = modalFocusOrigins.get(id);
+      modalFocusOrigins.delete(id);
+      if (origin instanceof HTMLElement && document.contains(origin)) origin.focus();
+    };
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      finish();
+      return;
     }
-    if (id === "adminDeleteModal") {
-      $("#adminDeleteForm").reset();
-      $("#adminDeleteMessage").textContent = "";
-      adminDeleteTarget = null;
-    }
-    if (id === "aiConsentModal") {
-      $("#aiConsentMessage").textContent = "";
-      pendingAiAction = null;
-    }
-    const origin = modalFocusOrigins.get(id);
-    modalFocusOrigins.delete(id);
-    if (origin instanceof HTMLElement && document.contains(origin)) origin.focus();
+    modal.classList.add("modal-closing");
+    modalCloseTimers.set(id, setTimeout(finish, 210));
   }
 
   function openUserMenu() {
@@ -437,6 +473,23 @@
     setTimeout(() => dashboard.classList.remove("home-rise-in"), 460);
   }
 
+  function playRefreshMotion() {
+    const section = $(`[data-page-section="${activePage}"]`);
+    if (!section) return;
+    section.classList.remove("page-refresh-rise");
+    void section.offsetWidth;
+    section.classList.add("page-refresh-rise");
+    setTimeout(() => section.classList.remove("page-refresh-rise"), 380);
+  }
+
+  function playAdminMotion() {
+    const page = $("#adminPage");
+    page.classList.remove("admin-page-enter");
+    void page.offsetWidth;
+    page.classList.add("admin-page-enter");
+    setTimeout(() => page.classList.remove("admin-page-enter"), 380);
+  }
+
   function showLearningShell() {
     $("#adminPage").hidden = true;
     $("#dashboard").hidden = false;
@@ -519,18 +572,24 @@
     if (apiConfig.enabled) {
       const query = encodeURIComponent($("#adminUserQuery")?.value.trim() || "");
       const status = encodeURIComponent($("#adminUserStatus")?.value || "");
-      const [overview, userPage, stats, subjects, questions] = await Promise.all([
+      const [overview, userPage, stats, subjects, questions, problemBank, aiOperations, reports] = await Promise.all([
         apiRequest("/admin/overview"),
         apiRequest(`/admin/users?query=${query}&status=${status}&page=${adminPageIndex}&size=${adminPageSize}`),
         apiRequest("/admin/statistics/subjects"),
         apiRequest("/admin/subjects"),
-        apiRequest("/admin/questions")
+        apiRequest("/admin/questions"),
+        apiRequest("/admin/problem-bank/overview"),
+        apiRequest("/admin/ai/operations"),
+        apiRequest("/admin/question-reports")
       ]);
       adminUserPage = userPage;
       adminOverview = { ...overview, recentUsers: userPage.content };
       adminSubjectStats = stats;
       adminSubjects = subjects;
       adminQuestions = questions;
+      adminProblemBank = problemBank;
+      adminAiOperations = aiOperations;
+      adminQuestionReports = reports;
     } else {
       adminOverview = {
           adminUserId: 1,
@@ -549,6 +608,9 @@
       adminSubjectStats = [];
       adminSubjects = subjectCatalog.map(subject => ({ ...subject, active: true }));
       adminQuestions = [];
+      adminProblemBank = [];
+      adminAiOperations = null;
+      adminQuestionReports = [];
     }
     renderAdminOverview();
     return adminOverview;
@@ -631,6 +693,16 @@
     $("#adminQuestionSubject").innerHTML = adminSubjects.filter(item => item.active).map(item => `<option value="${item.id}">${escapeHtml(item.name)} (${escapeHtml(item.code)})</option>`).join("");
     $("#adminSubjectList").innerHTML = adminSubjects.map(item => `<article class="history-item"><div><strong>${escapeHtml(item.name)}</strong><p>${escapeHtml(item.code)} · ${item.active ? "활성" : "비활성"}</p></div><button class="button secondary small" type="button" data-admin-subject-active="${item.id}" data-next-active="${!item.active}">${item.active ? "비활성화" : "활성화"}</button></article>`).join("");
     $("#adminQuestionList").innerHTML = adminQuestions.map(item => `<article class="history-item"><div><strong>#${item.questionNo} ${escapeHtml(item.questionText)}</strong><p>${escapeHtml(item.difficulty)} · ${item.active ? "출제 중" : "비활성"}</p></div><div class="admin-user-actions"><button class="button secondary small" type="button" data-admin-question-edit="${item.id}">수정</button><button class="button secondary small" type="button" data-admin-question-active="${item.id}" data-next-active="${!item.active}">${item.active ? "비활성화" : "활성화"}</button></div></article>`).join("") || '<span class="metric-caption">등록된 문제가 없습니다.</span>';
+    $("#adminProblemBankList").innerHTML = adminProblemBank.length
+      ? adminProblemBank.map(item => `<article class="history-item"><div><strong>${escapeHtml(item.subjectName)} · ${escapeHtml(item.difficulty)}</strong><p>활성 ${item.activeCount}개 · 비활성 ${item.inactiveCount}개 · 전체 ${item.totalCount}개</p></div><span class="today-tag">${item.lastCreatedAt ? new Date(item.lastCreatedAt).toLocaleDateString("ko-KR") : "생성 이력 없음"}</span></article>`).join("")
+      : '<span class="metric-caption">문제은행 현황을 불러오지 못했습니다.</span>';
+    const ai = adminAiOperations;
+    $("#adminAiOperations").innerHTML = ai
+      ? `<div class="admin-metrics compact"><article class="admin-metric"><span>7일 요청</span><strong>${ai.requestCount}</strong></article><article class="admin-metric"><span>성공</span><strong>${ai.successCount}</strong></article><article class="admin-metric"><span>실패</span><strong>${ai.failedCount}</strong></article><article class="admin-metric"><span>평균 응답</span><strong>${ai.averageLatencyMs}ms</strong></article><article class="admin-metric"><span>사용 토큰</span><strong>${ai.totalTokens}</strong></article></div><p class="metric-caption">문제 생성 성공 실행 ${ai.questionRuns}회 · 실패 유형: ${(ai.failures || []).map(item => `${escapeHtml(item.errorCode)} ${item.count}건`).join(", ") || "없음"}</p>`
+      : '<span class="metric-caption">AI 운영 현황을 불러오는 중입니다.</span>';
+    $("#adminQuestionReports").innerHTML = adminQuestionReports.length
+      ? adminQuestionReports.map(item => `<article class="history-item"><div><strong>${escapeHtml(item.subjectName)} · ${escapeHtml(item.type)} · ${escapeHtml(item.status)}</strong><p>${escapeHtml(item.questionText)}${item.detail ? ` · ${escapeHtml(item.detail)}` : ""}</p></div><div class="admin-user-actions"><button class="button secondary small" type="button" data-report-status="RESOLVED" data-report-id="${item.id}">처리 완료</button><button class="button secondary small" type="button" data-report-status="DISMISSED" data-report-id="${item.id}">기각</button></div></article>`).join("")
+      : '<span class="metric-caption">접수된 문제 신고가 없습니다.</span>';
   }
 
   function resetAdminQuestionForm() {
@@ -667,6 +739,7 @@
       $("#dashboard").hidden = true;
       $("#categoryNav").hidden = true;
       $("#adminPage").hidden = false;
+      playAdminMotion();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       toast(error.message);
@@ -935,11 +1008,12 @@
   }
 
   async function loadLearningState() {
-    const [subjects, learning, dashboard, wrongNotes] = await Promise.all([
+    const [subjects, learning, dashboard, wrongNotes, notifications] = await Promise.all([
       apiRequest("/learning/subjects"),
       apiRequest("/learning/state"),
       apiRequest("/learning/dashboard?days=28"),
-      apiRequest("/learning/wrong-notes")
+      apiRequest("/learning/wrong-notes"),
+      apiRequest("/notifications")
     ]);
     subjectCatalog = subjects;
     applyProfile(learning.profile);
@@ -950,6 +1024,10 @@
     state.quizTotal = learning.diagnosis?.totalQuestions || 0;
     state.dashboard = { ...defaultState.dashboard, ...(dashboard || {}) };
     state.wrongNotes = Array.isArray(wrongNotes) ? wrongNotes : [];
+    state.notifications = Array.isArray(notifications) ? notifications.map(item => ({
+      id: String(item.id), title: item.title, message: item.message, page: item.targetPage,
+      read: item.read, createdAt: item.createdAt, sourceKey: item.sourceKey, type: item.type
+    })) : [];
     renderSubjectChoices();
     await loadAiState();
   }
@@ -968,7 +1046,7 @@
   }
 
   async function refreshCurrentPage() {
-    const buttons = [$("#refreshCurrentPage"), $("#refreshHistory")];
+    const buttons = [$("#refreshCurrentPage")];
     if (!state.authenticated || pageRefreshInFlight) return;
     pageRefreshInFlight = true;
     buttons.forEach(button => { button.disabled = true; });
@@ -978,9 +1056,10 @@
         await loadAccountDetails();
       } else {
         await loadLearningState();
-        if (activePage === "history") await loadPlanHistory({ throwOnError: true });
+      if (activePage === "history") await loadPlanHistory({ throwOnError: true });
       }
       updateUI();
+      playRefreshMotion();
       toast("현재 페이지를 최신 데이터로 새로고침했습니다.");
     } catch (error) {
       toast(`새로고침하지 못했습니다: ${error.message}`);
@@ -1078,7 +1157,7 @@
   function renderPlanHistory() {
     $("#planHistoryList").innerHTML = state.planHistory.length
       ? state.planHistory.map(item => `
-          <article class="history-item"><div><strong>${escapeHtml(item.subjectName)} · ${escapeHtml(item.title)}</strong><p>${escapeHtml(item.planDate)} · ${escapeHtml(item.status)}</p></div><span class="today-tag">${item.completedSteps}/${item.totalSteps}단계</span></article>`).join("")
+          <article class="history-item"><div><strong>${escapeHtml(item.subjectName)} · ${escapeHtml(item.title)}</strong><p>${escapeHtml(item.planDate)} · ${escapeHtml(item.status)}</p>${planHistoryDetails.get(item.id) ? `<ol class="plan-step-actions">${planHistoryDetails.get(item.id).steps.map(step => `<li><strong>${escapeHtml(step.title)}</strong> — ${escapeHtml(step.content)}</li>`).join("")}</ol>` : ""}</div><div class="admin-user-actions"><span class="today-tag">${item.completedSteps}/${item.totalSteps}단계</span><button class="button secondary small" type="button" data-plan-detail="${item.id}">상세 비교</button><button class="button secondary small" type="button" data-plan-select="${item.id}">이 플랜 사용</button></div></article>`).join("")
       : '<div class="empty-state"><div><strong>아직 학습 기록이 없습니다.</strong><span>플랜을 생성하면 날짜별 기록이 표시됩니다.</span></div></div>';
   }
 
@@ -1137,9 +1216,11 @@
     const allNotes = state.wrongNotes || [];
     const subjectFilter = $("#wrongSubjectFilter").value;
     const statusFilter = $("#wrongStatusFilter").value;
+    const countFilter = Number($("#wrongCountFilter").value || 0);
     const notes = allNotes.filter(note =>
       (!subjectFilter || note.subjectCode === subjectFilter) &&
-      (statusFilter === "all" || (statusFilter === "done" ? note.relearned : !note.relearned))
+      (statusFilter === "all" || (statusFilter === "done" ? note.relearned : !note.relearned)) &&
+      (!countFilter || (countFilter === 1 ? note.wrongCount === 1 : note.wrongCount >= countFilter))
     );
     const pending = allNotes.filter(note => !note.relearned).length;
     $("#wrongNoteCount").textContent = `미해결 ${pending}개`;
@@ -1321,7 +1402,6 @@
     renderNotifications();
     renderPlanCriteria();
     $("#refreshCurrentPage").disabled = !state.authenticated || pageRefreshInFlight;
-    $("#refreshHistory").disabled = !state.authenticated || pageRefreshInFlight;
   }
 
   function setAuthMode(mode) {
@@ -1432,11 +1512,14 @@
   }
 
   async function startQuiz(mode = "BANK") {
-    const code = state.quizSubjectCode || state.subjects[0];
+    const code = mode === "WRONG" && $("#wrongSubjectFilter").value
+      ? $("#wrongSubjectFilter").value
+      : state.quizSubjectCode || state.subjects[0];
     if (!code) return;
     const useAi = mode === "AI";
+    const useWrongNotes = mode === "WRONG";
     const run = async () => {
-      const button = useAi ? $("#aiQuizButton") : $("#quizButton");
+      const button = useAi ? $("#aiQuizButton") : useWrongNotes ? $("#wrongRetryButton") : $("#quizButton");
       button.disabled = true;
       if (useAi) button.setAttribute("aria-busy", "true");
       if (useAi) await showAiLoading(`AI가 ${subjectName(code)} 확인 문제 5개를 만들고 있어요`);
@@ -1469,13 +1552,17 @@
             });
           }
           addNotification("AI 문제 생성 완료", `${subjectName(code)} 문제 5개가 준비되었습니다.`, "quiz");
+        } else if (useWrongNotes && apiConfig.enabled) {
+          questions = await apiRequest(`/learning/wrong-notes/questions?subjectCode=${encodeURIComponent(code)}`);
+          if (!questions.length) throw new Error("이 과목에는 다시 풀 미해결 오답이 없습니다.");
+          aiQuizRunId = null;
         } else {
           questions = apiConfig.enabled
             ? await apiRequest(`/learning/diagnosis/questions?subjectCode=${encodeURIComponent(code)}`)
             : fallbackQuestions;
           aiQuizRunId = useAi ? 1 : null;
         }
-        quizMode = useAi ? "AI" : "BANK";
+        quizMode = useAi ? "AI" : useWrongNotes ? "WRONG" : "BANK";
         quizAnswers = [];
         quizIndex = 0;
         quizScore = 0;
@@ -1500,13 +1587,16 @@
 
   function renderQuestion() {
     const question = questions[quizIndex];
-    $("#quizTitle").textContent = quizMode === "AI" ? "AI 확인 문제" : "오늘의 확인 문제";
+    $("#quizTitle").textContent = quizMode === "AI" ? "AI 확인 문제" : quizMode === "WRONG" ? "오답 다시 풀기" : "오늘의 확인 문제";
     $("#questionCounter").textContent = `${quizIndex + 1} / ${questions.length}`;
     $("#quizProgressBar").style.width = `${((quizIndex + 1) / questions.length) * 100}%`;
     $("#questionSubject").textContent = `${question.subjectName} · ${question.difficulty}`;
     $("#questionText").textContent = question.text;
+    $("#reportQuestionButton").dataset.questionId = String(question.id);
     $("#quizSubjectText").textContent = quizMode === "AI"
       ? `${subjectName(state.quizSubjectCode || state.subjects[0])} 맞춤 문제 · 결과는 연습용입니다.`
+      : quizMode === "WRONG"
+        ? `${subjectName(state.quizSubjectCode || state.subjects[0])} 미해결 오답을 다시 확인합니다.`
       : `${subjectName(state.quizSubjectCode || state.subjects[0])} 핵심 내용을 확인합니다.`;
     $("#answerList").innerHTML = question.options.map((option, index) => `
       <button class="answer" type="button" data-answer="${option.id}">
@@ -1520,11 +1610,23 @@
     answerChecked = false;
   }
 
-  function addNotification(title, message, page = "dashboard") {
+  function addNotification(title, message, page = "dashboard", { type = "GENERAL", sourceKey = null } = {}) {
     if (!state.authenticated) return;
-    state.notifications = [{ id: `${Date.now()}-${Math.random()}`, title, message, page, read: false, createdAt: new Date().toISOString() }, ...(state.notifications || [])].slice(0, 30);
+    const localId = `local-${Date.now()}-${Math.random()}`;
+    state.notifications = [{ id: localId, title, message, page, read: false, createdAt: new Date().toISOString(), sourceKey, type }, ...(state.notifications || [])].slice(0, 30);
     saveState();
     renderNotifications();
+    if (apiConfig.enabled) {
+      void apiRequest("/notifications", {
+        method: "POST",
+        body: JSON.stringify({ type, sourceKey, title, message, targetPage: page })
+      }).then(saved => {
+        state.notifications = (state.notifications || []).map(item => item.id === localId ? {
+          ...item, id: String(saved.id), read: saved.read, createdAt: saved.createdAt, sourceKey: saved.sourceKey, type: saved.type
+        } : item);
+        renderNotifications();
+      }).catch(error => console.warn("알림을 저장하지 못했습니다.", error));
+    }
   }
 
   function notificationItems() {
@@ -1533,7 +1635,7 @@
     (state.wrongNotes || []).filter(note => !note.relearned).forEach(note => {
       pendingBySubject[note.subjectCode] = (pendingBySubject[note.subjectCode] || 0) + 1;
     });
-    Object.entries(pendingBySubject).forEach(([code, count]) => derived.push({ id: `wrong-${code}`, title: `${subjectName(code)} 재학습 필요`, message: `아직 해결하지 않은 오답 ${count}개가 있습니다. 오답 노트를 확인해 보세요.`, page: "wrong", read: (state.notificationReadKeys || []).includes(`wrong-${code}`) }));
+    Object.entries(pendingBySubject).forEach(([code, count]) => derived.push({ id: `wrong-${code}`, title: `${subjectName(code)} 재학습 필요`, message: `아직 해결하지 않은 오답 ${count}개가 있습니다. 오답 노트를 확인해 보세요.`, page: "wrong", persistent: false, read: (state.notificationReadKeys || []).includes(`wrong-${code}`) }));
     return [...derived, ...(state.notifications || [])];
   }
 
@@ -1555,6 +1657,10 @@
     state.notifications = (state.notifications || []).map(notification => notification.id === item.id ? { ...notification, read: true } : notification);
     state.notificationReadKeys = [...new Set([...(state.notificationReadKeys || []), item.id])];
     saveState();
+    if (apiConfig.enabled && item.persistent !== false && !String(item.id).startsWith("local-")) {
+      void apiRequest(`/notifications/${encodeURIComponent(item.id)}/read`, { method: "PATCH" })
+        .catch(error => console.warn("알림 읽음 상태를 저장하지 못했습니다.", error));
+    }
     closeModal("notificationModal");
     showPage(item.page);
   }
@@ -1794,6 +1900,10 @@
     state.notificationReadKeys = [...new Set([...(state.notificationReadKeys || []), ...items.map(item => item.id)])];
     saveState();
     renderNotifications();
+    if (apiConfig.enabled) {
+      void apiRequest("/notifications/read-all", { method: "PATCH" })
+        .catch(error => console.warn("알림 읽음 상태를 저장하지 못했습니다.", error));
+    }
   });
   $("#userMenuScrim").addEventListener("click", () => closeUserMenu({ restoreFocus: true }));
   $("#userMenuButton").addEventListener("keydown", event => {
@@ -1819,6 +1929,10 @@
     const item = event.target.closest("[data-user-action]");
     if (!item) return;
     const action = item.dataset.userAction;
+    if (action === "theme") {
+      applyTheme(!document.body.classList.contains("dark-mode"));
+      return;
+    }
     closeUserMenu();
     try {
       if (action === "account") await openAccountSettings();
@@ -1912,7 +2026,69 @@
   $("#adminQuestionCancel").addEventListener("click", resetAdminQuestionForm);
   $("#wrongSubjectFilter").addEventListener("change", renderWrongNotes);
   $("#wrongStatusFilter").addEventListener("change", renderWrongNotes);
-  $("#refreshHistory").addEventListener("click", refreshCurrentPage);
+  $("#wrongCountFilter").addEventListener("change", renderWrongNotes);
+  $("#wrongRetryButton").addEventListener("click", () => startQuiz("WRONG"));
+  $("#planHistoryList").addEventListener("click", async event => {
+    const detail = event.target.closest("[data-plan-detail]");
+    const select = event.target.closest("[data-plan-select]");
+    if (!detail && !select) return;
+    const planId = Number((detail || select).dataset.planDetail || (detail || select).dataset.planSelect);
+    try {
+      if (detail) {
+        const plan = apiConfig.enabled ? await apiRequest(`/learning/plans/${planId}`) : null;
+        if (plan) planHistoryDetails.set(planId, plan);
+        renderPlanHistory();
+      } else if (select) {
+        if (apiConfig.enabled) await apiRequest(`/learning/plans/${planId}/select`, { method: "PUT" });
+        await loadLearningState();
+        updateUI();
+        toast("선택한 플랜을 현재 학습 플랜으로 설정했습니다.");
+      }
+    } catch (error) { toast(error.message); }
+  });
+  $("#adminQuestionReports").addEventListener("click", async event => {
+    const button = event.target.closest("[data-report-id]");
+    if (!button) return;
+    const reportId = Number(button.dataset.reportId);
+    const status = button.dataset.reportStatus;
+    const resolutionNote = prompt(status === "RESOLVED" ? "처리 메모를 남겨 주세요. (선택)" : "기각 사유를 남겨 주세요. (선택)") || "";
+    button.disabled = true;
+    try {
+      if (apiConfig.enabled) await apiRequest(`/admin/question-reports/${reportId}`, {
+        method: "PATCH", body: JSON.stringify({ status, resolutionNote })
+      });
+      await loadAdminOverview();
+      toast(status === "RESOLVED" ? "문제 신고를 처리 완료했습니다." : "문제 신고를 기각했습니다.");
+    } catch (error) { toast(error.message); }
+    finally { button.disabled = false; }
+  });
+  $("#reportQuestionButton").addEventListener("click", () => {
+    reportQuestionId = Number($("#reportQuestionButton").dataset.questionId);
+    if (!reportQuestionId) return;
+    $("#questionReportMessage").textContent = "";
+    openModal("questionReportModal");
+  });
+  $("#questionReportForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!reportQuestionId) return;
+    const submit = event.currentTarget.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    $("#questionReportMessage").textContent = "";
+    try {
+      if (apiConfig.enabled) {
+        await apiRequest(`/learning/questions/${reportQuestionId}/reports`, {
+          method: "POST",
+          body: JSON.stringify({ type: $("#questionReportType").value, detail: $("#questionReportDetail").value })
+        });
+      }
+      closeModal("questionReportModal");
+      toast("문제 신고를 접수했습니다. 관리자 검토 후 반영됩니다.");
+    } catch (error) {
+      $("#questionReportMessage").textContent = error.message;
+    } finally {
+      submit.disabled = false;
+    }
+  });
   $("#refreshCurrentPage").addEventListener("click", refreshCurrentPage);
   $("#reauthForm").addEventListener("submit", async event => {
     event.preventDefault();
@@ -2194,7 +2370,11 @@
     try {
       if (apiConfig.enabled) {
         const result = await apiRequest("/learning/diagnosis/attempts", {
-          method: "POST", body: JSON.stringify({ subjectCode: state.quizSubjectCode || state.subjects[0], answers: quizAnswers })
+          method: "POST", body: JSON.stringify({
+            subjectCode: state.quizSubjectCode || state.subjects[0],
+            attemptType: quizMode === "WRONG" ? "RELEARN" : "DIAGNOSTIC",
+            answers: quizAnswers
+          })
         });
         state.quizCorrect = result.correctAnswers;
         state.quizTotal = result.totalQuestions;

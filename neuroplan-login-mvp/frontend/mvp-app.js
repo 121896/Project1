@@ -44,6 +44,8 @@
       dailyStats: [], subjectStats: [], streakDays: 0, unresolvedWrongNotes: 0
     },
     wrongNotes: [],
+    notifications: [],
+    notificationReadKeys: [],
     planHistory: [],
     ai: {
       preferences: { enabled: false, consentAt: null, explanationStyle: "BRIEF", availableMinutes: 30 },
@@ -773,6 +775,7 @@
 
   async function handleAiRequestError(error) {
     if (!error?.network || !apiConfig.enabled) {
+      addNotification("AI 작업 실패", error.message, "plan");
       toast(error.message);
       return;
     }
@@ -782,6 +785,7 @@
     } catch (_) {
       // 응답이 끊긴 경우에도 저장 상태 확인을 시도한 뒤 원래 오류를 안내합니다.
     }
+    addNotification("AI 작업 실패·환불 확인", `${error.message} 저장된 결과와 토큰 잔량을 확인해 주세요.`, "plan");
     toast(`${error.message} 저장된 결과를 확인했습니다.`);
   }
 
@@ -1153,6 +1157,7 @@
     $("#signupButton").hidden = state.authenticated;
     $("#resetDemo").hidden = apiConfig.enabled;
     $("#userMenu").hidden = !state.authenticated;
+    $("#notificationButton").hidden = !state.authenticated;
     $("#adminMenuItem").hidden = !state.authenticated || !state.isAdmin;
     $("#withdrawButton").hidden = !state.authenticated;
     if (!state.authenticated) closeUserMenu();
@@ -1242,6 +1247,7 @@
     renderPlanHistory();
     renderWrongNotes();
     renderAiFeatures();
+    renderNotifications();
     renderPlanCriteria();
     $("#refreshCurrentPage").disabled = !state.authenticated || pageRefreshInFlight;
     $("#refreshHistory").disabled = !state.authenticated || pageRefreshInFlight;
@@ -1302,6 +1308,7 @@
         state.quizTotal = 0;
         updateUI();
         toast(`${subjectName(code)} AI 학습 플랜을 만들었어요.`);
+        addNotification("AI 플랜 생성 완료", `${subjectName(code)} 오늘의 학습 플랜이 준비되었습니다.`, "plan");
         $("#todayPlanTitle").scrollIntoView({ behavior: "smooth", block: "center" });
       } catch (error) {
         await handleAiRequestError(error);
@@ -1332,6 +1339,7 @@
         updateAiQuota(generated.quota);
         updateUI();
         toast(generated.fallback ? "기본 재학습 추천을 준비했습니다." : "AI 재학습 추천을 생성했습니다.");
+        addNotification("AI 추천 도착", `${subjectName(code)} 다음 학습 추천이 도착했습니다.`, "plan");
       } catch (error) {
         await handleAiRequestError(error);
       } finally {
@@ -1373,6 +1381,7 @@
           });
           updateAiQuota(generated.quota);
           if (generated.fallback) toast("AI 응답 대신 검증된 기본 문제를 준비했습니다.");
+          addNotification("AI 문제 생성 완료", `${subjectName(code)} 문제 5개가 준비되었습니다.`, "quiz");
         } else {
           questions = apiConfig.enabled
             ? await apiRequest(`/learning/diagnosis/questions?subjectCode=${encodeURIComponent(code)}`)
@@ -1421,6 +1430,35 @@
     $("#nextQuestion").textContent = "답안 제출";
     chosenAnswer = null;
     answerChecked = false;
+  }
+
+  function addNotification(title, message, page = "dashboard") {
+    if (!state.authenticated) return;
+    state.notifications = [{ id: `${Date.now()}-${Math.random()}`, title, message, page, read: false, createdAt: new Date().toISOString() }, ...(state.notifications || [])].slice(0, 30);
+    saveState();
+    renderNotifications();
+  }
+
+  function notificationItems() {
+    const derived = [];
+    const pendingBySubject = {};
+    (state.wrongNotes || []).filter(note => !note.relearned).forEach(note => {
+      pendingBySubject[note.subjectCode] = (pendingBySubject[note.subjectCode] || 0) + 1;
+    });
+    Object.entries(pendingBySubject).forEach(([code, count]) => derived.push({ id: `wrong-${code}`, title: `${subjectName(code)} 재학습 필요`, message: `아직 해결하지 않은 오답 ${count}개가 있습니다. 오답 노트를 확인해 보세요.`, page: "wrong", read: (state.notificationReadKeys || []).includes(`wrong-${code}`) }));
+    return [...derived, ...(state.notifications || [])];
+  }
+
+  function renderNotifications() {
+    const items = notificationItems();
+    const unread = items.filter(item => !item.read).length;
+    $("#notificationBadge").hidden = unread === 0;
+    $("#notificationBadge").textContent = String(Math.min(unread, 99));
+    $("#notificationList").innerHTML = items.length ? items.map(item => `
+      <article class="notification-item${item.read ? "" : " unread"}">
+        <strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.message)}</p>
+        ${item.createdAt ? `<time>${new Date(item.createdAt).toLocaleString("ko-KR")}</time>` : ""}
+      </article>`).join("") : '<div class="empty-state"><div><strong>새 알림이 없습니다.</strong><span>중요한 학습 소식이 여기에 표시됩니다.</span></div></div>';
   }
 
   function restoreQuizSetForSubject(code) {
@@ -1635,6 +1673,17 @@
   $("#userMenuButton").addEventListener("click", () => {
     if ($("#userDropdown").hidden) openUserMenu();
     else closeUserMenu({ restoreFocus: true });
+  });
+  $("#notificationButton").addEventListener("click", () => {
+    renderNotifications();
+    openModal("notificationModal");
+  });
+  $("#markNotificationsRead").addEventListener("click", () => {
+    const items = notificationItems();
+    state.notifications = (state.notifications || []).map(item => ({ ...item, read: true }));
+    state.notificationReadKeys = [...new Set([...(state.notificationReadKeys || []), ...items.map(item => item.id)])];
+    saveState();
+    renderNotifications();
   });
   $("#userMenuScrim").addEventListener("click", () => closeUserMenu({ restoreFocus: true }));
   $("#userMenuButton").addEventListener("keydown", event => {

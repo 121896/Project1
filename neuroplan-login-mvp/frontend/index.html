@@ -373,7 +373,8 @@
     .wrong-note-item [data-relearn-question] { margin-top: 4px; }
     .wrong-note-status { padding: 5px 8px; border-radius: 999px; color: #39705a; background: var(--teal-soft); font-size: 10px; font-weight: 900; white-space: nowrap; }
     .wrong-note-status.pending { color: #9e5148; background: var(--danger-soft); }
-    .wrong-note-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .wrong-note-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin-top: 12px; }
+    .wrong-note-actions > .button { align-self: flex-start; }
     .wrong-note-actions .ai-action-with-usage { align-items: flex-start; }
     .wrong-note-actions .button.ghost { border-color: var(--line); color: var(--blue); }
     .wrong-note-actions .button.ghost:hover { background: #f2f8f3; }
@@ -505,7 +506,7 @@
     }
     .quiz-callout strong { display: block; font-size: 14px; }
     .quiz-callout p { margin: 5px 0 0; color: #7e6b36; font-size: 11px; }
-    .quiz-launch-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+    .quiz-launch-actions { display: flex; align-items: flex-start; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 
     .profile-summary {
       padding: 18px;

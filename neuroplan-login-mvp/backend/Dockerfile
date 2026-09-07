@@ -18,3 +18,7 @@ ENV HOME=/tmp
 USER 1001
 EXPOSE 8080
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-Djava.io.tmpdir=/tmp", "-jar", "/app/app.jar"]
+
+# CI verification: backend-only deployment
+
+# CI verification: simultaneous deployment

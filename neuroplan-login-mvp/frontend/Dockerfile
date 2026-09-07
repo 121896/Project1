@@ -1,4 +1,5 @@
 FROM harbor.nplan.local:80/neuroplan/nginx:1.28-alpine
+LABEL org.opencontainers.image.title="NeuroPlan Frontend"
 
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY index.html /usr/share/nginx/html/index.html

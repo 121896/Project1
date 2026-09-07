@@ -246,6 +246,9 @@ SELECT generation_run_id, entry_type, token_delta,
  LIMIT 20;
 ```
 
+AI 문제은행의 질문·보기·정답 중복 저장을 차단하려면 배포 전에
+`neuroplan-login-mvp/db/03-add-question-content-hash.sql`을 DB Primary에 한 번 적용합니다.
+
 `ir_app`에 DDL 권한이 없다면 제약 조건 변경은 DBA 계정으로만 수행합니다. 기존 `NEURONS` 이력은 유지하고 `TOKENS`만 추가 허용하면 됩니다.
 
 ## 2. DevOps VM 파일 배치

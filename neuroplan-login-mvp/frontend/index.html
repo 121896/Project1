@@ -33,6 +33,10 @@
 
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
+    :where(a, button, input, select, textarea):focus-visible {
+      outline: 3px solid #78a98e;
+      outline-offset: 3px;
+    }
     body {
       margin: 0;
       min-width: 320px;
@@ -796,8 +800,11 @@
       pointer-events: none;
       transition: opacity .2s ease, transform .2s ease;
     }
-    .toast.show { transform: none; opacity: 1; }
+    .toast.show { transform: none; opacity: 1; pointer-events: auto; }
     .toast-icon { color: var(--yellow); font-size: 16px; }
+    .toast-message { flex: 1; min-width: 0; line-height: 1.45; }
+    .toast-action { flex: 0 0 auto; min-height: 30px; padding: 0 10px; border: 1px solid rgba(255,255,255,.58); border-radius: 9px; color: #fff; background: rgba(255,255,255,.12); cursor: pointer; font-size: 11px; font-weight: 800; }
+    .toast-action:hover { background: rgba(255,255,255,.24); }
 
     .ai-loading-backdrop {
       position: fixed;
@@ -1442,7 +1449,7 @@
     </div>
   </div>
 
-  <div class="toast" id="toast" role="status" aria-live="polite"><span class="toast-icon">●</span><span id="toastMessage"></span></div>
+  <div class="toast" id="toast"><span class="toast-icon" aria-hidden="true">●</span><span class="toast-message" id="toastMessage" role="status" aria-live="polite"></span><button class="toast-action" id="toastAction" type="button" hidden>다시 시도</button></div>
 
   <script src="config.js"></script>
   <script type="text/plain" id="legacy-mvp-app">

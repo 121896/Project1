@@ -263,14 +263,18 @@ public class AiGenerationService {
     }
 
     public void markPersistenceFailure(long runId, String message) {
+        markFailure(runId, "PERSISTENCE_FAILED", message);
+    }
+
+    public void markFailure(long runId, String errorCode, String message) {
         jdbcTemplate.update("""
                 UPDATE ai_generation_runs
                    SET generation_status = 'FAILED',
-                       error_code = 'PERSISTENCE_FAILED',
+                       error_code = ?,
                        error_message = ?,
                        completed_at = CURRENT_TIMESTAMP(6)
                  WHERE id = ?
-                """, truncate(message, 500), runId);
+                """, truncate(errorCode, 50), truncate(message, 500), runId);
     }
 
     private FeedbackGeneration fallbackFeedback(long userId, long runId, WrongNoteContext context,

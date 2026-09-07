@@ -133,8 +133,11 @@
   let pendingSecureAction = null;
   let pendingAiAction = null;
   let aiLoadingHideTimer = null;
+  let aiLoadingProgressTimers = [];
   let aiLoadingStartedAt = 0;
   let loadingMinimumDurationMs = 0;
+  let toastActionHandler = null;
+  const modalFocusOrigins = new Map();
   let refreshSessionPromise = null;
   let pageRefreshInFlight = false;
   const aiLoadingMinDurationMs = 800;
@@ -145,6 +148,8 @@
                         minimumDurationMs = aiLoadingMinDurationMs) {
     const overlay = $("#aiLoadingOverlay");
     clearTimeout(aiLoadingHideTimer);
+    aiLoadingProgressTimers.forEach(clearTimeout);
+    aiLoadingProgressTimers = [];
     $("#aiLoadingTitle").textContent = title;
     $("#aiLoadingMessage").textContent = message;
     if (active) {
@@ -169,10 +174,19 @@
   }
 
   function showAiLoading(title) {
-    setAiLoading(true, title);
+    setAiLoading(true, title, "1/3 · AI 요청을 전송하고 있어요.");
+    aiLoadingProgressTimers = [
+      setTimeout(() => setAiLoadingMessage("2/3 · AI 응답을 검증하고 있어요."), 900),
+      setTimeout(() => setAiLoadingMessage("3/3 · 검증된 결과를 저장하고 있어요."), 2800)
+    ];
     return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => {
       setTimeout(resolve, 80);
     })));
+  }
+
+  function setAiLoadingMessage(message) {
+    const overlay = $("#aiLoadingOverlay");
+    if (overlay.classList.contains("is-visible")) $("#aiLoadingMessage").textContent = message;
   }
 
   function showRefreshLoading() {
@@ -293,8 +307,9 @@
       setTimeout(clearAuthFields, 0);
     }
     const modal = document.getElementById(id);
+    modalFocusOrigins.set(id, document.activeElement);
     modal.hidden = false;
-    const firstInput = modal.querySelector("input, button");
+    const firstInput = modal.querySelector("button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])");
     if (firstInput) setTimeout(() => firstInput.focus(), 0);
   }
 
@@ -315,6 +330,9 @@
       $("#aiConsentMessage").textContent = "";
       pendingAiAction = null;
     }
+    const origin = modalFocusOrigins.get(id);
+    modalFocusOrigins.delete(id);
+    if (origin instanceof HTMLElement && document.contains(origin)) origin.focus();
   }
 
   function openUserMenu() {
@@ -657,12 +675,33 @@
     }
   }
 
-  function toast(message) {
+  function toast(message, { actionLabel = "", onAction = null, duration = 6000 } = {}) {
     clearTimeout(toastTimer);
+    toastActionHandler = onAction;
     $("#toastMessage").textContent = message;
+    $("#toastAction").hidden = !actionLabel || typeof onAction !== "function";
+    $("#toastAction").textContent = actionLabel || "다시 시도";
     $("#toast").classList.add("show");
-    toastTimer = setTimeout(() => $("#toast").classList.remove("show"), 6000);
+    toastTimer = setTimeout(() => {
+      $("#toast").classList.remove("show");
+      $("#toastAction").hidden = true;
+      toastActionHandler = null;
+    }, duration);
   }
+
+  $("#toastAction").addEventListener("click", async () => {
+    const retry = toastActionHandler;
+    if (typeof retry !== "function") return;
+    clearTimeout(toastTimer);
+    $("#toast").classList.remove("show");
+    $("#toastAction").hidden = true;
+    toastActionHandler = null;
+    try {
+      await retry();
+    } catch (error) {
+      toast(aiFailureMessage(error));
+    }
+  });
 
   function isAiRequest(path) {
     return path.startsWith("/ai/");
@@ -783,10 +822,32 @@
     return payload;
   }
 
-  async function handleAiRequestError(error) {
+  function aiFailureMessage(error) {
+    const message = String(error?.message || "AI 요청을 완료하지 못했습니다.");
+    if (error?.status === 429 || /토큰.*사용|RATE_LIMIT/i.test(message)) {
+      return "오늘 사용할 수 있는 AI 토큰을 모두 사용했습니다. 내일 다시 시도해 주세요.";
+    }
+    if (/PERSISTENCE_FAILED|결과를 저장하지 못했|저장 실패/i.test(message)) {
+      return "AI 응답은 생성됐지만 결과를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+    }
+    if (/DUPLICATE_QUESTION|기존 문제와 중복/i.test(message)) {
+      return "기존 문제와 중복된 내용이 감지되었습니다. 새 문제로 다시 시도해 주세요.";
+    }
+    if (/INVALID_JSON|응답 형식|JSON/i.test(message)) {
+      return "AI 응답 형식을 검증하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+    }
+    if (error?.network || error?.status >= 500) {
+      return "AI 서버 응답이 지연되었거나 중단되었습니다. 잠시 후 다시 시도해 주세요.";
+    }
+    return message;
+  }
+
+  async function handleAiRequestError(error, { retry = null, page = "plan" } = {}) {
+    const message = aiFailureMessage(error);
+    const canRetry = typeof retry === "function" && error?.status !== 429;
     if (!error?.network || !apiConfig.enabled) {
-      addNotification("AI 작업 실패", error.message, "plan");
-      toast(error.message);
+      addNotification("AI 작업 실패", message, page);
+      toast(message, canRetry ? { actionLabel: "다시 시도", onAction: retry } : {});
       return;
     }
     try {
@@ -795,8 +856,8 @@
     } catch (_) {
       // 응답이 끊긴 경우에도 저장 상태 확인을 시도한 뒤 원래 오류를 안내합니다.
     }
-    addNotification("AI 작업 실패·환불 확인", `${error.message} 저장된 결과와 토큰 잔량을 확인해 주세요.`, "plan");
-    toast(`${error.message} 저장된 결과를 확인했습니다.`);
+    addNotification("AI 작업 실패·결과 확인", `${message} 저장된 결과와 토큰 잔량을 확인해 주세요.`, page);
+    toast(message, canRetry ? { actionLabel: "다시 시도", onAction: retry } : {});
   }
 
   async function loadAiState() {
@@ -1295,7 +1356,9 @@
     await ensureAiEnabled(async () => {
       const button = $("#generatePlan");
       button.disabled = true;
+      button.setAttribute("aria-busy", "true");
       const code = state.activeSubjectCode || state.subjects[0];
+      let usedFallback = false;
       await showAiLoading(`AI가 ${subjectName(code)} 학습 플랜을 만들고 있어요`);
       try {
         if (apiConfig.enabled) {
@@ -1305,7 +1368,12 @@
           state.ai.planRationale = { ...state.ai.planRationale, [plan.subjectCode]: generated.rationale };
           updateAiQuota(generated.quota);
           selectActivePlan(plan.subjectCode);
-          if (generated.fallback) toast("AI 연결을 사용할 수 없어 검증된 기본 플랜을 생성했습니다.");
+          usedFallback = Boolean(generated.fallback);
+          if (generated.fallback) {
+            toast("AI 응답을 검증하지 못해 기본 플랜을 생성했습니다.", {
+              actionLabel: "다시 시도", onAction: generatePlan
+            });
+          }
         } else {
           state.planId = 1;
           state.planGenerated = true;
@@ -1317,14 +1385,15 @@
         state.quizCorrect = 0;
         state.quizTotal = 0;
         updateUI();
-        toast(`${subjectName(code)} AI 학습 플랜을 만들었어요.`);
+        if (!usedFallback) toast(`${subjectName(code)} AI 학습 플랜을 만들었어요.`);
         addNotification("AI 플랜 생성 완료", `${subjectName(code)} 오늘의 학습 플랜이 준비되었습니다.`, "plan");
         $("#todayPlanTitle").scrollIntoView({ behavior: "smooth", block: "center" });
       } catch (error) {
-        await handleAiRequestError(error);
+        await handleAiRequestError(error, { retry: generatePlan, page: "plan" });
       } finally {
         setAiLoading(false);
         button.disabled = !hasCompleteProfile();
+        button.removeAttribute("aria-busy");
       }
     });
   }
@@ -1335,6 +1404,7 @@
       const button = $("#generateRecommendation");
       const code = state.activeSubjectCode || state.subjects[0];
       button.disabled = true;
+      button.setAttribute("aria-busy", "true");
       await showAiLoading(`AI가 ${subjectName(code)} 학습 기록을 분석하고 있어요`);
       try {
         const generated = apiConfig.enabled
@@ -1348,13 +1418,15 @@
         state.ai.recommendations = [recommendation, ...(state.ai.recommendations || []).filter(item => item.subjectCode !== code)];
         updateAiQuota(generated.quota);
         updateUI();
-        toast(generated.fallback ? "기본 재학습 추천을 준비했습니다." : "AI 재학습 추천을 생성했습니다.");
+        toast(generated.fallback ? "AI 응답을 검증하지 못해 기본 재학습 추천을 준비했습니다." : "AI 재학습 추천을 생성했습니다.",
+          generated.fallback ? { actionLabel: "다시 시도", onAction: generateRecommendation } : {});
         addNotification("AI 추천 도착", `${subjectName(code)} 다음 학습 추천이 도착했습니다.`, "plan");
       } catch (error) {
-        await handleAiRequestError(error);
+        await handleAiRequestError(error, { retry: generateRecommendation, page: "plan" });
       } finally {
         setAiLoading(false);
         button.disabled = !hasCompleteProfile();
+        button.removeAttribute("aria-busy");
       }
     });
   }
@@ -1366,6 +1438,7 @@
     const run = async () => {
       const button = useAi ? $("#aiQuizButton") : $("#quizButton");
       button.disabled = true;
+      if (useAi) button.setAttribute("aria-busy", "true");
       if (useAi) await showAiLoading(`AI가 ${subjectName(code)} 확인 문제 5개를 만들고 있어요`);
       try {
         if (useAi && apiConfig.enabled) {
@@ -1390,7 +1463,11 @@
             }))
           });
           updateAiQuota(generated.quota);
-          if (generated.fallback) toast("AI 응답 대신 검증된 기본 문제를 준비했습니다.");
+          if (generated.fallback) {
+            toast("AI 응답을 검증하지 못해 기본 문제를 준비했습니다.", {
+              actionLabel: "다시 시도", onAction: () => startQuiz("AI")
+            });
+          }
           addNotification("AI 문제 생성 완료", `${subjectName(code)} 문제 5개가 준비되었습니다.`, "quiz");
         } else {
           questions = apiConfig.enabled
@@ -1409,11 +1486,12 @@
         renderQuestion();
         $("#quizWorkspace").scrollIntoView({ behavior: "smooth", block: "start" });
       } catch (error) {
-        if (useAi) await handleAiRequestError(error);
+        if (useAi) await handleAiRequestError(error, { retry: () => startQuiz("AI"), page: "quiz" });
         else toast(error.message);
       } finally {
         if (useAi) setAiLoading(false);
         button.disabled = !hasCompleteProfile() || !state.quizSubjectCode;
+        button.removeAttribute("aria-busy");
       }
     };
     if (useAi) await ensureAiEnabled(run);
@@ -2152,12 +2230,29 @@
     toast("데모 데이터를 초기화했습니다.");
   });
 
-  // 인증/프로필/퀴즈 모달은 실수로 닫히지 않도록 배경 클릭을 무시합니다.
+  // 모달 안에서 Tab 키가 순환하도록 하고, 배경 클릭은 무시합니다.
   // 명시적인 X 버튼과 Escape 키만 닫기 동작으로 사용합니다.
   document.addEventListener("keydown", event => {
-    if (event.key !== "Escape") return;
     const openBackdrop = $$(".modal-backdrop").find(backdrop => !backdrop.hidden);
-    if (openBackdrop) closeModal(openBackdrop.id);
+    if (!openBackdrop) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeModal(openBackdrop.id);
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = $$("button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]", openBackdrop)
+      .filter(element => !element.hidden && element.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   });
 
   document.addEventListener("click", async event => {
@@ -2249,6 +2344,7 @@
       const questionId = Number(aiFeedbackAction.dataset.aiFeedback);
       await ensureAiEnabled(async () => {
         aiFeedbackAction.disabled = true;
+        aiFeedbackAction.setAttribute("aria-busy", "true");
         await showAiLoading("AI가 오답을 분석하고 맞춤 해설을 만들고 있어요");
         try {
           const generated = apiConfig.enabled
@@ -2265,12 +2361,14 @@
           };
           updateAiQuota(generated.quota);
           updateUI();
-          toast(generated.fallback ? "기본 오답 해설을 준비했습니다." : "AI 맞춤 오답 해설을 생성했습니다.");
+          toast(generated.fallback ? "AI 응답을 검증하지 못해 기본 오답 해설을 준비했습니다." : "AI 맞춤 오답 해설을 생성했습니다.",
+            generated.fallback ? { actionLabel: "다시 시도", onAction: () => aiFeedbackAction.click() } : {});
         } catch (error) {
-          await handleAiRequestError(error);
+          await handleAiRequestError(error, { retry: () => aiFeedbackAction.click(), page: "wrong" });
         } finally {
           setAiLoading(false);
           aiFeedbackAction.disabled = false;
+          aiFeedbackAction.removeAttribute("aria-busy");
         }
       });
       return;

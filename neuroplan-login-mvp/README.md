@@ -263,7 +263,7 @@ SELECT generation_run_id, entry_type, token_delta,
  LIMIT 20;
 ```
 
-AI 문제를 기존 오답 노트에 기록하려면 `diagnosis_questions.question_no`가 과목당 초기 1~10번만 허용하는 CHECK 제약에 묶여 있으면 안 됩니다. 문제은행을 50~100개까지 확장할 계획이라면 DB 담당자가 `question_no`를 충분한 범위의 번호로 허용하고, 향후에는 `content_hash` 중복 차단 컬럼을 별도 마이그레이션으로 추가해야 합니다. 애플리케이션 계정은 DDL을 실행하지 않습니다.
+AI 문제를 기존 오답 노트에 기록하려면 `diagnosis_questions.question_no`가 과목당 초기 1~10번만 허용하는 CHECK 제약에 묶여 있으면 안 됩니다. 문제은행을 50~100개까지 확장할 계획이면 DB 담당자가 `question_no`를 충분한 범위로 허용하고, 배포 전에 [`db/03-add-question-content-hash.sql`](db/03-add-question-content-hash.sql)을 Primary에 한 번 적용해야 합니다. 이 마이그레이션은 같은 과목에서 질문·보기·정답이 같은 AI 문제의 재저장을 차단합니다. 애플리케이션 계정은 DDL을 실행하지 않습니다.
 
 `ir_app`에 DDL 권한이 없다면 제약 조건 변경은 DBA 계정으로만 수행합니다. 기존 `NEURONS` 이력은 유지하고 `TOKENS`만 추가 허용하면 됩니다.
 

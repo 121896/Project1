@@ -99,7 +99,19 @@
     .category-nav-inner::-webkit-scrollbar { display: none; }
     .category-button { min-height: 37px; padding: 0 14px; border: 1px solid transparent; border-radius: 12px; color: var(--muted); background: transparent; cursor: pointer; font-size: 12px; font-weight: 800; white-space: nowrap; }
     .category-button.active { color: #315f4b; border-color: #bcd6c7; background: var(--teal-soft); }
-    .page-refresh-button { flex: 0 0 auto; min-height: 42px; padding: 0 14px; border-radius: 14px; margin-left: auto; }
+    .page-refresh-button {
+      flex: 0 0 auto;
+      min-height: 42px;
+      padding: 0 13px;
+      border: 0;
+      border-radius: 14px;
+      margin-left: auto;
+      color: var(--blue-dark);
+      background: var(--blue-soft);
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .page-refresh-button:hover { background: #dceee3; }
     [data-page-section][hidden] { display: none !important; }
     [data-page-section].page-swipe-enter-right { animation: page-swipe-enter-right .28s ease-out both; }
     [data-page-section].page-swipe-enter-left { animation: page-swipe-enter-left .28s ease-out both; }
@@ -924,6 +936,7 @@
           <span class="ai-token-chip-track" role="progressbar" aria-label="오늘 남은 AI 토큰" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="확인할 수 없음"><span id="aiTokenChipBar"></span></span>
         </span>
         <button class="button secondary small notification-button" id="notificationButton" type="button" aria-label="알림" aria-controls="notificationModal" hidden><span class="button-icon" aria-hidden="true">🔔</span><span>알림</span><span class="notification-badge" id="notificationBadge" hidden>0</span></button>
+        <button class="button secondary small page-refresh-button" id="refreshCurrentPage" type="button" disabled><span class="button-icon" aria-hidden="true">↻</span><span>새로고침</span></button>
         <div class="user-menu" id="userMenu" hidden>
           <button class="user-chip" id="userMenuButton" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="userDropdown">
             <span class="user-avatar" id="userInitial">김</span>
@@ -963,7 +976,6 @@
       <button class="category-button" type="button" data-page="quiz">문제 풀이</button>
       <button class="category-button" type="button" data-page="wrong">오답 노트</button>
       <button class="category-button" type="button" data-page="history">학습 기록</button>
-      <button class="button secondary small page-refresh-button" id="refreshCurrentPage" type="button" disabled><span class="button-icon" aria-hidden="true">↻</span><span>새로고침</span></button>
     </div>
   </nav>
 

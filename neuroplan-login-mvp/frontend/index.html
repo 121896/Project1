@@ -370,10 +370,14 @@
     .wrong-note-answer { margin-top: 12px; padding: 12px 13px; border-radius: 12px; color: #203d32; background: #eef6f1; font-size: 12px; line-height: 1.65; }
     .wrong-note-answer strong { color: #153328; }
     .wrong-note-explanation { margin: 8px 0 16px; color: #294b3d; font-size: 12px; line-height: 1.7; }
-    .wrong-note-item [data-relearn-question] { margin-top: 4px; }
+    .wrong-note-item [data-relearn-question] { margin-top: 0; }
     .wrong-note-status { padding: 5px 8px; border-radius: 999px; color: #39705a; background: var(--teal-soft); font-size: 10px; font-weight: 900; white-space: nowrap; }
     .wrong-note-status.pending { color: #9e5148; background: var(--danger-soft); }
-    .wrong-note-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .wrong-note-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin-top: 12px; }
+    .wrong-note-actions > .button { align-self: flex-start; }
+    .wrong-note-actions .ai-action-with-usage { align-items: flex-start; }
+    .wrong-note-actions .button.ghost { border-color: var(--line); color: var(--blue); }
+    .wrong-note-actions .button.ghost:hover { background: #f2f8f3; }
     .ai-feedback { margin-top: 13px; padding: 14px; border: 1px solid #bfd9c9; border-radius: 14px; background: #f0f8f3; }
     .ai-feedback strong { display: block; margin-bottom: 6px; color: #285844; font-size: 12px; }
     .ai-feedback p { margin: 0; color: #244438; font-size: 12px; line-height: 1.65; }
@@ -502,7 +506,7 @@
     }
     .quiz-callout strong { display: block; font-size: 14px; }
     .quiz-callout p { margin: 5px 0 0; color: #7e6b36; font-size: 11px; }
-    .quiz-launch-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+    .quiz-launch-actions { display: flex; align-items: flex-start; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 
     .profile-summary {
       padding: 18px;
@@ -514,13 +518,15 @@
     .subject-tags { margin-top: 13px; display: flex; flex-wrap: wrap; gap: 7px; }
     .subject-tag { padding: 6px 9px; border-radius: 9px; color: var(--blue-dark); background: #fff; font-size: 11px; font-weight: 800; }
     .plan-criteria-card { margin-top: 12px; padding: 14px 15px; border: 1px solid #d3e5da; border-radius: 15px; background: #f7fbf8; }
+    .plan-criteria-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .plan-criteria-card > strong { display: block; color: var(--navy); font-size: 13px; }
+    .plan-criteria-edit { flex: 0 0 auto; padding: 4px 8px; border: 1px solid #c8ddd0; border-radius: 8px; color: #315f4c; background: #fff; font-size: 10px; font-weight: 800; cursor: pointer; }
+    .plan-criteria-edit:hover { background: #edf7f0; }
     .plan-criteria-list { margin: 9px 0 0; padding: 0; display: grid; gap: 7px; list-style: none; }
     .plan-criteria-list li { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 11px; line-height: 1.45; }
     .plan-criteria-list li span { flex: 0 0 auto; }
     .plan-criteria-list li strong { min-width: 0; flex: 1 1 auto; color: #315f4c; text-align: right; word-break: keep-all; overflow-wrap: break-word; }
-    .plan-criteria-list li .plan-subject-list { display: grid; justify-items: end; gap: 3px; }
-    .plan-criteria-list li .plan-subject-list span { display: block; white-space: nowrap; }
+    .plan-criteria-subjects { min-width: 0; flex: 1 1 auto; display: grid; gap: 3px; color: #315f4c; text-align: right; font-weight: 800; }
     .progress-list { margin: 20px 0 22px; display: grid; gap: 17px; }
     .profile-plan-button { position: static; flex: 0 0 auto; margin-top: 0; }
     .ai-quota-card { margin-top: 14px; padding: 14px; border: 1px solid #c8ddd0; border-radius: 15px; background: linear-gradient(135deg, #eff8f2, #f9fcfa); }
@@ -531,6 +537,10 @@
     .ai-quota-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #5c9e7e, #8bbda2); }
     .ai-quota-foot { margin-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 10px; }
     .ai-action-with-usage { display: inline-flex; align-items: center; flex-direction: column; gap: 5px; }
+    .ai-action-with-usage .ai-average-note { width: 100%; text-align: center; }
+    .quiz-launch-actions .ai-action-with-usage { min-width: 112px; }
+    .quiz-launch-actions .ai-action-with-usage .button,
+    .wrong-note-actions .ai-action-with-usage .button { min-height: 36px; }
     .ai-average-note { color: #5d776b; font-size: 9px; font-weight: 800; line-height: 1.25; white-space: nowrap; }
     .profile-ai-action { display: grid; gap: 6px; }
     .profile-ai-action .ai-average-note { text-align: center; }
@@ -1032,7 +1042,7 @@
           <div class="subject-tags" id="subjectTags"><span class="subject-tag">과목을 선택해 주세요</span></div>
         </div>
         <div class="plan-criteria-card" aria-labelledby="planCriteriaTitle">
-          <strong id="planCriteriaTitle">플랜 생성 기준</strong>
+          <div class="plan-criteria-head"><strong id="planCriteriaTitle">플랜 생성 기준</strong><button class="plan-criteria-edit" id="editAiSettings" type="button">학습 플랜 설정</button></div>
           <ul class="plan-criteria-list" id="planCriteriaList">
             <li><span>과목·수준</span><strong>설정 전</strong></li>
             <li><span>학습 시간</span><strong>30분</strong></li>

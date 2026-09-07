@@ -110,6 +110,8 @@
   let answerChecked = false;
   let quizMode = "BANK";
   let aiQuizRunId = null;
+  // 과목을 바꿔도 이미 생성한 AI 문제를 덮어쓰지 않도록 과목 코드별로 보관합니다.
+  const quizSetsBySubject = new Map();
   let toastTimer;
   let adminOverview = null;
   let adminSubjects = [];
@@ -181,16 +183,16 @@
     if (!normalized) return '<p class="plan-step-summary">학습 내용을 준비하고 있습니다.</p>';
 
     const lines = normalized
-      // 목록 번호는 `1. `, `1) `, `① `처럼 마커 뒤에 공백이 있을 때만 인식한다.
+      // 목록 번호는 `1. `, `1) `, `① `, `1단계: ` 형식을 인식한다.
       // `8.8.8.8`, `1.1.1.1`, 버전 `1.35.4`는 숫자 목록이 아니므로 중간에서 나누지 않는다.
-      .replace(/[\s\u00a0]+(?=(?:\d{1,2}[.)]|[①-⑳])[\s\u00a0]+)/g, "\n")
+      .replace(/[\s\u00a0]+(?=(?:\d{1,2}단계(?:\s*\([^)]*\))?\s*[:.)-]?|\d{1,2}[.)]|[①-⑳])[\s\u00a0]*)/g, "\n")
       .split(/\n+/)
       .map(value => value.trim())
       .filter(Boolean);
     const intro = [];
     const actions = [];
     lines.forEach(line => {
-      const numbered = line.match(/^(?:\d{1,2}[.)]|[①-⑳])[\s\u00a0]+(.+)$/s);
+      const numbered = line.match(/^(?:\d{1,2}단계(?:\s*\([^)]*\))?\s*[:.)-]?|\d{1,2}[.)]|[①-⑳])[\s\u00a0]*(.+)$/s);
       if (numbered) actions.push(numbered[1].trim());
       else if (actions.length) actions[actions.length - 1] = `${actions[actions.length - 1]} ${line}`.trim();
       else intro.push(line);
@@ -1130,13 +1132,12 @@
 
   function renderPlanCriteria() {
     const preference = state.ai.preferences || defaultState.ai.preferences;
-    const styleLabels = { BRIEF: "간단히", DETAILED: "상세히", PRACTICAL: "실습 중심" };
-    const profile = hasCompleteProfile() ? profileLabel() : "과목·수준 설정 전";
-    const subjectList = hasCompleteProfile()
-      ? state.subjects.map(code => `<span>${escapeHtml(subjectName(code))} · ${escapeHtml(state.subjectLevels[code])}</span>`).join("")
-      : escapeHtml(profile);
+    const styleLabels = { BRIEF: "간단히", DETAILED: "자세히", PRACTICAL: "실습 중심" };
+    const profileHtml = hasCompleteProfile()
+      ? `<div class="plan-criteria-subjects">${state.subjects.map(code => `<span>${escapeHtml(subjectName(code))} · ${escapeHtml(state.subjectLevels[code])}</span>`).join("")}</div>`
+      : `<strong>과목·수준 설정 전</strong>`;
     $("#planCriteriaList").innerHTML = `
-      <li><span>과목·수준</span><strong class="plan-subject-list">${subjectList}</strong></li>
+      <li><span>과목·수준</span>${profileHtml}</li>
       <li><span>학습 시간</span><strong>약 ${Number(preference.availableMinutes || 30)}분</strong></li>
       <li><span>설명 방식</span><strong>${escapeHtml(styleLabels[preference.explanationStyle] || "간단히")}</strong></li>
       <li><span>결과 구성</span><strong>오늘 수행할 3단계 실습</strong></li>`;
@@ -1362,6 +1363,14 @@
             }))
           }));
           aiQuizRunId = generated.generationRunId;
+          quizSetsBySubject.set(code, {
+            mode: "AI",
+            runId: aiQuizRunId,
+            questions: questions.map(question => ({
+              ...question,
+              options: question.options.map(option => ({ ...option }))
+            }))
+          });
           updateAiQuota(generated.quota);
           if (generated.fallback) toast("AI 응답 대신 검증된 기본 문제를 준비했습니다.");
         } else {
@@ -1414,6 +1423,27 @@
     answerChecked = false;
   }
 
+  function restoreQuizSetForSubject(code) {
+    const cached = quizSetsBySubject.get(code);
+    if (!cached) {
+      $("#quizWorkspace").hidden = true;
+      return;
+    }
+    questions = cached.questions.map(question => ({
+      ...question,
+      options: question.options.map(option => ({ ...option }))
+    }));
+    quizMode = cached.mode;
+    aiQuizRunId = cached.runId;
+    quizAnswers = [];
+    quizIndex = 0;
+    quizScore = 0;
+    chosenAnswer = null;
+    answerChecked = false;
+    $("#quizWorkspace").hidden = false;
+    renderQuestion();
+  }
+
   document.addEventListener("click", event => {
     const pageButton = event.target.closest("[data-page]");
     if (pageButton) showPage(pageButton.dataset.page);
@@ -1427,6 +1457,7 @@
     const quizSubject = event.target.closest("[data-quiz-subject]");
     if (quizSubject) {
       state.quizSubjectCode = quizSubject.dataset.quizSubject;
+      restoreQuizSetForSubject(state.quizSubjectCode);
       updateUI();
     }
 
@@ -1550,6 +1581,7 @@
 
   $("#generatePlan").addEventListener("click", generatePlan);
   $("#generateRecommendation").addEventListener("click", generateRecommendation);
+  $("#editAiSettings").addEventListener("click", () => openAiSettings());
   $("#aiConsentForm").addEventListener("submit", async event => {
     event.preventDefault();
     const consent = $("#aiConsentCheck").checked;

@@ -18,6 +18,7 @@
 - Frontend/Backend 이미지는 외부 Harbor Registry(`harbor.nplan.local:80/neuroplan`)를 사용합니다.
 - Kubernetes와 DR k3s의 이미지 Pull은 각 클러스터에 미리 등록한 `harbor-pull-secret`으로 수행합니다.
 - AI provider는 Gemini API이며, API 키는 `neuroplan-gemini-secrets`의 `GEMINI_API_KEY`로 주입합니다.
+- 배포 ConfigMap에는 `LLM_PROVIDER=GEMINI`와 `GEMINI_*` 연결 정보를 사용하며, 기존 Cloudflare endpoint/model/account 설정은 포함하지 않습니다.
 - Secret, API 키, 인증서, Ansible Vault 원문은 저장소에 포함하지 않습니다. 배포 전 운영 환경에서 별도로 생성해야 합니다.
 
 ## 주의

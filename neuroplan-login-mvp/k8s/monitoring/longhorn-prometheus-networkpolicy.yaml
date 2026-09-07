@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-to-longhorn-manager-metrics
+  namespace: longhorn-system
+  labels:
+    app.kubernetes.io/part-of: neuroplan-monitoring
+spec:
+  # This policy only opens the Longhorn manager metrics port to Prometheus.
+  # Other Longhorn manager ingress remains governed by the existing policies.
+  podSelector:
+    matchLabels:
+      app: longhorn-manager
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9500

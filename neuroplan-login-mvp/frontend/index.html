@@ -514,11 +514,15 @@
     .subject-tags { margin-top: 13px; display: flex; flex-wrap: wrap; gap: 7px; }
     .subject-tag { padding: 6px 9px; border-radius: 9px; color: var(--blue-dark); background: #fff; font-size: 11px; font-weight: 800; }
     .plan-criteria-card { margin-top: 12px; padding: 14px 15px; border: 1px solid #d3e5da; border-radius: 15px; background: #f7fbf8; }
+    .plan-criteria-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .plan-criteria-card > strong { display: block; color: var(--navy); font-size: 13px; }
+    .plan-criteria-edit { flex: 0 0 auto; padding: 4px 8px; border: 1px solid #c8ddd0; border-radius: 8px; color: #315f4c; background: #fff; font-size: 10px; font-weight: 800; cursor: pointer; }
+    .plan-criteria-edit:hover { background: #edf7f0; }
     .plan-criteria-list { margin: 9px 0 0; padding: 0; display: grid; gap: 7px; list-style: none; }
     .plan-criteria-list li { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 11px; line-height: 1.45; }
     .plan-criteria-list li span { flex: 0 0 auto; }
     .plan-criteria-list li strong { min-width: 0; flex: 1 1 auto; color: #315f4c; text-align: right; word-break: keep-all; overflow-wrap: break-word; }
+    .plan-criteria-subjects { min-width: 0; flex: 1 1 auto; display: grid; gap: 3px; color: #315f4c; text-align: right; font-weight: 800; }
     .progress-list { margin: 20px 0 22px; display: grid; gap: 17px; }
     .profile-plan-button { position: static; flex: 0 0 auto; margin-top: 0; }
     .ai-quota-card { margin-top: 14px; padding: 14px; border: 1px solid #c8ddd0; border-radius: 15px; background: linear-gradient(135deg, #eff8f2, #f9fcfa); }
@@ -1030,7 +1034,7 @@
           <div class="subject-tags" id="subjectTags"><span class="subject-tag">과목을 선택해 주세요</span></div>
         </div>
         <div class="plan-criteria-card" aria-labelledby="planCriteriaTitle">
-          <strong id="planCriteriaTitle">플랜 생성 기준</strong>
+          <div class="plan-criteria-head"><strong id="planCriteriaTitle">플랜 생성 기준</strong><button class="plan-criteria-edit" id="editAiSettings" type="button">설명 방식 설정</button></div>
           <ul class="plan-criteria-list" id="planCriteriaList">
             <li><span>과목·수준</span><strong>설정 전</strong></li>
             <li><span>학습 시간</span><strong>30분</strong></li>

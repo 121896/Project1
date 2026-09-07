@@ -1131,9 +1131,11 @@
   function renderPlanCriteria() {
     const preference = state.ai.preferences || defaultState.ai.preferences;
     const styleLabels = { BRIEF: "간단히", DETAILED: "상세히", PRACTICAL: "실습 중심" };
-    const profile = hasCompleteProfile() ? profileLabel() : "과목·수준 설정 전";
+    const profileHtml = hasCompleteProfile()
+      ? `<div class="plan-criteria-subjects">${state.subjects.map(code => `<span>${escapeHtml(subjectName(code))} · ${escapeHtml(state.subjectLevels[code])}</span>`).join("")}</div>`
+      : `<strong>과목·수준 설정 전</strong>`;
     $("#planCriteriaList").innerHTML = `
-      <li><span>과목·수준</span><strong>${escapeHtml(profile)}</strong></li>
+      <li><span>과목·수준</span>${profileHtml}</li>
       <li><span>학습 시간</span><strong>약 ${Number(preference.availableMinutes || 30)}분</strong></li>
       <li><span>설명 방식</span><strong>${escapeHtml(styleLabels[preference.explanationStyle] || "간단히")}</strong></li>
       <li><span>결과 구성</span><strong>오늘 수행할 3단계 실습</strong></li>`;
@@ -1547,6 +1549,7 @@
 
   $("#generatePlan").addEventListener("click", generatePlan);
   $("#generateRecommendation").addEventListener("click", generateRecommendation);
+  $("#editAiSettings").addEventListener("click", () => openAiSettings());
   $("#aiConsentForm").addEventListener("submit", async event => {
     event.preventDefault();
     const consent = $("#aiConsentCheck").checked;

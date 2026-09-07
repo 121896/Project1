@@ -110,6 +110,8 @@
   let answerChecked = false;
   let quizMode = "BANK";
   let aiQuizRunId = null;
+  // 과목을 바꿔도 이미 생성한 AI 문제를 덮어쓰지 않도록 과목 코드별로 보관합니다.
+  const quizSetsBySubject = new Map();
   let toastTimer;
   let adminOverview = null;
   let adminSubjects = [];
@@ -1361,6 +1363,14 @@
             }))
           }));
           aiQuizRunId = generated.generationRunId;
+          quizSetsBySubject.set(code, {
+            mode: "AI",
+            runId: aiQuizRunId,
+            questions: questions.map(question => ({
+              ...question,
+              options: question.options.map(option => ({ ...option }))
+            }))
+          });
           updateAiQuota(generated.quota);
           if (generated.fallback) toast("AI 응답 대신 검증된 기본 문제를 준비했습니다.");
         } else {
@@ -1413,6 +1423,27 @@
     answerChecked = false;
   }
 
+  function restoreQuizSetForSubject(code) {
+    const cached = quizSetsBySubject.get(code);
+    if (!cached) {
+      $("#quizWorkspace").hidden = true;
+      return;
+    }
+    questions = cached.questions.map(question => ({
+      ...question,
+      options: question.options.map(option => ({ ...option }))
+    }));
+    quizMode = cached.mode;
+    aiQuizRunId = cached.runId;
+    quizAnswers = [];
+    quizIndex = 0;
+    quizScore = 0;
+    chosenAnswer = null;
+    answerChecked = false;
+    $("#quizWorkspace").hidden = false;
+    renderQuestion();
+  }
+
   document.addEventListener("click", event => {
     const pageButton = event.target.closest("[data-page]");
     if (pageButton) showPage(pageButton.dataset.page);
@@ -1426,6 +1457,7 @@
     const quizSubject = event.target.closest("[data-quiz-subject]");
     if (quizSubject) {
       state.quizSubjectCode = quizSubject.dataset.quizSubject;
+      restoreQuizSetForSubject(state.quizSubjectCode);
       updateUI();
     }
 

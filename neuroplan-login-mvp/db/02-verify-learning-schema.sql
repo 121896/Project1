@@ -8,7 +8,7 @@ FROM (
   UNION ALL SELECT 'user_subjects', 6
   UNION ALL SELECT 'daily_plans', 8
   UNION ALL SELECT 'plan_steps', 9
-  UNION ALL SELECT 'diagnosis_questions', 9
+  UNION ALL SELECT 'diagnosis_questions', 10
   UNION ALL SELECT 'question_options', 5
   UNION ALL SELECT 'diagnosis_attempts', 9
   UNION ALL SELECT 'diagnosis_answers', 6

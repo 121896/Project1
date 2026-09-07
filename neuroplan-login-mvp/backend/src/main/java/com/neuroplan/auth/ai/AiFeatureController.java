@@ -1,8 +1,19 @@
 package com.neuroplan.auth.ai;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -11,6 +22,8 @@ import com.neuroplan.auth.ai.AiGenerationService.FeedbackGeneration;
 import com.neuroplan.auth.ai.AiGenerationService.PlanGeneration;
 import com.neuroplan.auth.ai.AiGenerationService.QuizCheckResult;
 import com.neuroplan.auth.ai.AiGenerationService.QuizGeneration;
+import com.neuroplan.auth.ai.AiGenerationService.QuizOptionContent;
+import com.neuroplan.auth.ai.AiGenerationService.QuizQuestionContent;
 import com.neuroplan.auth.ai.AiGenerationService.RecommendationContext;
 import com.neuroplan.auth.ai.AiGenerationService.RecommendationGeneration;
 import com.neuroplan.auth.ai.AiGenerationService.WrongNoteContext;
@@ -251,7 +264,11 @@ public class AiFeatureController {
             log.error("AI persistence failed: runId={}, userId={}, reason={}",
                     generationRunId, userId, refundReason, persistenceFailure);
             try {
-                generationService.markPersistenceFailure(generationRunId, refundReason);
+                if (persistenceFailure instanceof DuplicateQuestionException duplicate) {
+                    generationService.markFailure(generationRunId, "DUPLICATE_QUESTION", duplicate.getMessage());
+                } else {
+                    generationService.markPersistenceFailure(generationRunId, refundReason);
+                }
             } catch (RuntimeException statusFailure) {
                 persistenceFailure.addSuppressed(statusFailure);
             }
@@ -260,8 +277,11 @@ public class AiFeatureController {
             } catch (RuntimeException refundFailure) {
                 persistenceFailure.addSuppressed(refundFailure);
             }
+            if (persistenceFailure instanceof DuplicateQuestionException duplicate) {
+                throw new ApiException(HttpStatus.CONFLICT, duplicate.getMessage());
+            }
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "AI 결과를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요. (실행 번호: "
+                    "PERSISTENCE_FAILED: AI 결과를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요. (실행 번호: "
                             + generationRunId + ")");
         }
     }
@@ -277,20 +297,33 @@ public class AiFeatureController {
                 """, (rs, rowNum) -> rs.getInt("question_no"), focus.subjectId())
                 .stream().findFirst().orElse(0);
         int[] nextQuestionNo = { highestQuestionNo == null ? 1 : highestQuestionNo + 1 };
-        return generated.content().questions().stream().map(question -> {
+        Set<String> knownHashes = existingQuestionHashes(focus.subjectId());
+        List<QuizQuestionContent> uniqueQuestions = new ArrayList<>();
+        for (QuizQuestionContent question : generated.content().questions()) {
+            String hash = questionContentHash(question);
+            if (!knownHashes.add(hash)) continue;
+            uniqueQuestions.add(question);
+        }
+        if (uniqueQuestions.size() != generated.content().questions().size()) {
+            throw new DuplicateQuestionException(
+                    "DUPLICATE_QUESTION: 기존 문제와 중복된 AI 문제가 포함되었습니다. 다시 시도해 주세요.");
+        }
+        return uniqueQuestions.stream().map(question -> {
+            String contentHash = questionContentHash(question);
             GeneratedKeyHolder keys = new GeneratedKeyHolder();
             jdbcTemplate.update(connection -> {
                 PreparedStatement statement = connection.prepareStatement("""
                         INSERT INTO diagnosis_questions (
-                            subject_id, question_no, difficulty, question_text, explanation,
+                            subject_id, question_no, difficulty, question_text, content_hash, explanation,
                             is_active, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
+                        ) VALUES (?, ?, ?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
                         """, Statement.RETURN_GENERATED_KEYS);
                 statement.setLong(1, focus.subjectId());
                 statement.setInt(2, nextQuestionNo[0]++);
                 statement.setString(3, difficultyCode(question.difficulty()));
                 statement.setString(4, question.text());
-                statement.setString(5, question.explanation());
+                statement.setString(5, contentHash);
+                statement.setString(6, question.explanation());
                 return statement;
             }, keys);
             if (keys.getKey() == null) throw new IllegalStateException("AI 문제 번호를 생성하지 못했습니다.");
@@ -314,6 +347,59 @@ public class AiFeatureController {
             return new AiQuizQuestionResponse(questionId, question.questionNo(), question.subjectName(),
                     question.difficulty(), question.text(), options);
         }).toList();
+    }
+
+    private Set<String> existingQuestionHashes(long subjectId) {
+        List<StoredQuestionOption> rows = jdbcTemplate.query("""
+                SELECT q.id, q.difficulty, q.question_text,
+                       o.option_no, o.option_text, o.is_correct
+                  FROM diagnosis_questions q
+                  JOIN question_options o ON o.question_id = q.id
+                 WHERE q.subject_id = ?
+                 ORDER BY q.id, o.option_no
+                """, (rs, rowNum) -> new StoredQuestionOption(
+                rs.getLong("id"), rs.getString("difficulty"), rs.getString("question_text"),
+                rs.getInt("option_no"), rs.getString("option_text"), rs.getBoolean("is_correct")
+        ), subjectId);
+        Map<Long, List<StoredQuestionOption>> optionsByQuestion = new LinkedHashMap<>();
+        for (StoredQuestionOption row : rows) {
+            optionsByQuestion.computeIfAbsent(row.questionId(), ignored -> new ArrayList<>()).add(row);
+        }
+        Set<String> hashes = new HashSet<>();
+        for (List<StoredQuestionOption> options : optionsByQuestion.values()) {
+            if (options.isEmpty()) continue;
+            StoredQuestionOption first = options.get(0);
+            List<QuizOptionContent> quizOptions = options.stream()
+                    .map(option -> new QuizOptionContent(option.optionNo(), option.optionText(), option.correct()))
+                    .toList();
+            hashes.add(questionContentHash(first.difficulty(), first.questionText(), quizOptions));
+        }
+        return hashes;
+    }
+
+    private String questionContentHash(QuizQuestionContent question) {
+        return questionContentHash(difficultyCode(question.difficulty()), question.text(), question.options());
+    }
+
+    private String questionContentHash(String difficulty, String questionText, List<QuizOptionContent> options) {
+        String optionText = options.stream()
+                .sorted(Comparator.comparingInt(QuizOptionContent::optionNo))
+                .map(option -> option.optionNo() + ":" + normalizeHashText(option.text())
+                        + ":" + (option.correct() ? "1" : "0"))
+                .reduce((left, right) -> left + "|" + right)
+                .orElse("");
+        String source = normalizeHashText(difficulty) + "|" + normalizeHashText(questionText) + "|" + optionText;
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(source.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception exception) {
+            throw new IllegalStateException("AI 문제 중복 확인용 해시를 만들지 못했습니다.", exception);
+        }
+    }
+
+    private String normalizeHashText(String value) {
+        return Normalizer.normalize(value == null ? "" : value, Normalizer.Form.NFKC)
+                .replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
     }
 
     private String difficultyCode(String value) {
@@ -481,4 +567,9 @@ public class AiFeatureController {
     public record AiRecommendationSummary(long id, long subjectId, String subjectCode, String subjectName,
                                           String title, String content, int priority,
                                           java.time.Instant createdAt) {}
+    private record StoredQuestionOption(long questionId, String difficulty, String questionText,
+                                        int optionNo, String optionText, boolean correct) {}
+    private static final class DuplicateQuestionException extends RuntimeException {
+        private DuplicateQuestionException(String message) { super(message); }
+    }
 }

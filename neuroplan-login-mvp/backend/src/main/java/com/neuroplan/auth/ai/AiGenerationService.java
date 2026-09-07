@@ -58,6 +58,8 @@ public class AiGenerationService {
                 runId, userId, subjectId, properties.getModel());
         PlanStyle planStyle = planStyle(preference.explanationStyle());
         String systemPrompt = JSON_ONLY + "당신은 IT 교육용 3단계 학습 플랜 생성기입니다. "
+                + "모든 자연어 텍스트는 한국어로만 작성하세요. 중국어·한자 문자를 사용하지 말고, "
+                + "Linux 명령어·경로·제품명처럼 고유한 기술 표기만 원문을 유지하세요. "
                 + "출력 키는 title, rationale, steps이며 steps는 정확히 3개입니다. "
                 + "각 단계는 stepNo, title, content를 포함하고 stepNo는 1, 2, 3입니다. "
                 + planStyle.systemInstruction();
@@ -261,14 +263,18 @@ public class AiGenerationService {
     }
 
     public void markPersistenceFailure(long runId, String message) {
+        markFailure(runId, "PERSISTENCE_FAILED", message);
+    }
+
+    public void markFailure(long runId, String errorCode, String message) {
         jdbcTemplate.update("""
                 UPDATE ai_generation_runs
                    SET generation_status = 'FAILED',
-                       error_code = 'PERSISTENCE_FAILED',
+                       error_code = ?,
                        error_message = ?,
                        completed_at = CURRENT_TIMESTAMP(6)
                  WHERE id = ?
-                """, truncate(message, 500), runId);
+                """, truncate(errorCode, 50), truncate(message, 500), runId);
     }
 
     private FeedbackGeneration fallbackFeedback(long userId, long runId, WrongNoteContext context,
@@ -481,8 +487,8 @@ public class AiGenerationService {
 
     private PlanContent parsePlan(String value, String subjectName, String levelLabel) throws JsonProcessingException {
         JsonNode root = parseObject(value);
-        String title = requiredText(root, "title", 200);
-        String rationale = optionalText(root, "rationale", subjectName + " · " + levelLabel + " 맞춤 기준", 1000);
+        String title = requireKoreanText(requiredText(root, "title", 200));
+        String rationale = requireKoreanText(optionalText(root, "rationale", subjectName + " · " + levelLabel + " 맞춤 기준", 1000));
         JsonNode stepsNode = root.path("steps");
         if (!stepsNode.isArray() || stepsNode.size() != 3) throw new IllegalArgumentException("steps must have 3 items");
         List<PlanStepContent> steps = new ArrayList<>();
@@ -490,9 +496,18 @@ public class AiGenerationService {
             JsonNode step = stepsNode.get(index);
             int stepNo = step.path("stepNo").asInt(step.path("step").asInt(index + 1));
             if (stepNo != index + 1) throw new IllegalArgumentException("invalid step number");
-            steps.add(new PlanStepContent(stepNo, requiredText(step, "title", 200), requiredText(step, "content", 4000)));
+            steps.add(new PlanStepContent(stepNo,
+                    requireKoreanText(requiredText(step, "title", 200)),
+                    requireKoreanText(requiredText(step, "content", 4000))));
         }
         return new PlanContent(title, rationale, steps);
+    }
+
+    private String requireKoreanText(String value) {
+        if (value != null && value.matches(".*[\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF].*")) {
+            throw new IllegalArgumentException("plan text contains Han characters");
+        }
+        return value;
     }
 
     private FeedbackContent parseFeedback(String value) throws JsonProcessingException {

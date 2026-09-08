@@ -477,18 +477,44 @@
     // 애니메이션을 재실행해 다른 화면에서 홈으로 돌아올 때도 동일하게 보입니다.
     void dashboard.offsetWidth;
     dashboard.classList.add("home-rise-in");
-    setTimeout(() => dashboard.classList.remove("home-rise-in"), 460);
+    setTimeout(() => dashboard.classList.remove("home-rise-in"), 780);
   }
 
   function playRefreshMotion() {
-    const section = $(`[data-page-section="${activePage}"]`);
-    if (!section) return;
-    // 페이지 진입용 좌우 모션이 남아 있으면 새로고침 상승 모션과 겹치므로 제거합니다.
-    section.classList.remove("page-swipe-enter-left", "page-swipe-enter-right");
-    section.classList.remove("page-refresh-rise");
-    void section.offsetWidth;
-    section.classList.add("page-refresh-rise");
-    setTimeout(() => section.classList.remove("page-refresh-rise"), 380);
+    const sections = $$(`[data-page-section="${activePage}"]`);
+    if (!sections.length) return;
+    const animated = [];
+    sections.forEach((section, sectionIndex) => {
+      // 페이지 진입용 좌우 모션이 남아 있으면 새로고침 상승 모션과 겹치지 않게 제거합니다.
+      section.classList.remove("page-swipe-enter-left", "page-swipe-enter-right", "page-refresh-rise");
+      const cards = Array.from(section.children).filter(child =>
+        child.matches("article, aside, .metric-card, .content-card")
+      );
+      if (cards.length > 1) {
+        cards.forEach((card, cardIndex) => {
+          card.classList.remove("page-refresh-rise-item");
+          card.style.setProperty("--refresh-delay", `${sectionIndex * 90 + cardIndex * 100}ms`);
+          void card.offsetWidth;
+          card.classList.add("page-refresh-rise-item");
+          animated.push(card);
+        });
+      } else {
+        section.style.setProperty("--refresh-delay", `${sectionIndex * 90}ms`);
+        void section.offsetWidth;
+        section.classList.add("page-refresh-rise");
+        animated.push(section);
+      }
+    });
+    setTimeout(() => {
+      sections.forEach(section => {
+        section.classList.remove("page-refresh-rise");
+        section.style.removeProperty("--refresh-delay");
+      });
+      animated.forEach(node => {
+        node.classList.remove("page-refresh-rise-item");
+        node.style.removeProperty("--refresh-delay");
+      });
+    }, 1250);
   }
 
   function playAdminMotion() {
@@ -496,7 +522,7 @@
     page.classList.remove("admin-page-enter");
     void page.offsetWidth;
     page.classList.add("admin-page-enter");
-    setTimeout(() => page.classList.remove("admin-page-enter"), 380);
+    setTimeout(() => page.classList.remove("admin-page-enter"), 780);
   }
 
   function showLearningShell() {
@@ -1104,7 +1130,10 @@
       renderSubjectChoices();
       updateUI();
       if (state.authenticated && requestedAdmin && state.isAdmin) await openAdminPage();
-      else await showPage(state.authenticated ? activePage : "dashboard", { updateLocation: false, scroll: false });
+      else {
+        await showPage(state.authenticated ? activePage : "dashboard", { updateLocation: false, scroll: false });
+        if (state.authenticated) playRefreshMotion();
+      }
       return;
     }
     let payload;
@@ -1137,7 +1166,10 @@
     }
     updateUI();
     if (requestedAdmin && state.isAdmin) await openAdminPage();
-    else await showPage(activePage, { updateLocation: false, scroll: false });
+    else {
+      await showPage(activePage, { updateLocation: false, scroll: false });
+      playRefreshMotion();
+    }
   }
 
   function renderSubjectChoices() {

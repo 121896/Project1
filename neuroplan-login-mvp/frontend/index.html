@@ -700,6 +700,8 @@
     .ai-quota-foot { margin-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 10px; }
     .ai-action-with-usage { display: inline-flex; align-items: center; flex-direction: column; gap: 5px; }
     .ai-action-with-usage .ai-average-note { width: 100%; text-align: center; }
+    .ai-recommendation-card .ai-action-with-usage { min-width: 190px; }
+    #generateRecommendation { min-width: 190px; }
     .quiz-launch-actions .ai-action-with-usage { min-width: 112px; }
     .quiz-launch-actions .ai-action-with-usage .button,
     .wrong-note-actions .ai-action-with-usage .button { min-height: 36px; }
@@ -1005,8 +1007,11 @@
     .account-badge.withdrawn { color: #9e5148; background: var(--danger-soft); }
     .admin-user-actions { display: flex; flex-wrap: wrap; gap: 6px; }
     .admin-user-actions .button { min-height: 30px; padding: 0 9px; font-size: 10px; }
-    .admin-pagination { margin-top: 13px; display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
-    .admin-pagination span { min-width: 92px; color: var(--muted); font-size: 11px; font-weight: 800; text-align: center; }
+    .admin-pagination { margin-top: 13px; display: flex; align-items: center; justify-content: center; gap: 12px; }
+    .admin-page-selector { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 800; white-space: nowrap; }
+    .admin-page-selector input { width: 48px; height: 36px; padding: 0 5px; border: 1px solid var(--line); border-radius: 11px; color: var(--navy); background: var(--paper); font-size: 12px; font-weight: 800; text-align: center; }
+    .admin-page-selector input:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+    .admin-page-total { color: var(--muted); font-size: 11px; font-weight: 800; }
     .delete-summary { margin: 0 0 14px; padding: 14px; border: 1px solid #edc4bf; border-radius: 14px; background: var(--danger-soft); }
     .delete-summary strong, .delete-summary span { display: block; overflow-wrap: anywhere; }
     .delete-summary span { margin-top: 5px; color: #94635d; font-size: 11px; }
@@ -1079,6 +1084,9 @@
       .hero { padding: 26px 21px; border-radius: 24px; }
       .hero h1 { font-size: 31px; }
       .content-card { padding: 19px; }
+      .ai-recommendation-card .card-head { flex-wrap: wrap; }
+      .ai-recommendation-card .ai-action-with-usage { width: 100%; min-width: 0; }
+      #generateRecommendation { width: 100%; min-width: 0; }
       .weekly-summary { grid-template-columns: 1fr; }
       .metric-grid { grid-template-columns: 1fr; }
       .metric-card { min-height: 118px; }
@@ -1318,11 +1326,11 @@
       <div class="card-head">
         <div><h2 id="aiRecommendationTitle">AI 다음 학습 추천</h2><p>정답률, 미해결 오답과 완료 단계를 바탕으로 다음 재학습 항목을 추천합니다.</p></div>
         <div class="ai-action-with-usage">
-          <button class="button secondary small" id="generateRecommendation" type="button" disabled>추천 생성</button>
+          <button class="button secondary small" id="generateRecommendation" type="button" disabled>AI 다음 학습 추천 생성</button>
           <span class="ai-average-note" data-ai-average="WEEKLY_INSIGHT">평균 사용 토큰 확인 중</span>
         </div>
       </div>
-      <div id="aiRecommendationResult" class="empty-state"><div><strong>아직 생성된 추천이 없습니다.</strong><span>과목을 선택하고 추천 생성 버튼을 눌러 주세요.</span></div></div>
+      <div id="aiRecommendationResult" class="empty-state"><div><strong>아직 생성된 추천이 없습니다.</strong><span>과목을 선택하고 AI 다음 학습 추천 생성 버튼을 눌러 주세요.</span></div></div>
     </section>
 
     <section class="insight-grid" data-page-section="dashboard" aria-label="학습 상세 통계">
@@ -1511,7 +1519,7 @@
       </div>
       <div class="admin-pagination" aria-label="회원 목록 페이지 이동">
         <button class="button secondary small" id="adminPrevPage" type="button">이전</button>
-        <span id="adminPageLabel">1 / 1</span>
+        <label class="admin-page-selector"><input id="adminPageInput" type="number" min="1" value="1" inputmode="numeric" aria-label="회원 목록 페이지 번호"><span>/</span><span class="admin-page-total" id="adminPageTotal">1</span></label>
         <button class="button secondary small" id="adminNextPage" type="button">다음</button>
       </div>
     </section>

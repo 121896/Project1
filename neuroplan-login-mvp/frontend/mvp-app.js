@@ -1350,7 +1350,7 @@
     $("#aiRecommendationResult").className = recommendation ? "ai-recommendation-result" : "empty-state";
     $("#aiRecommendationResult").innerHTML = recommendation
       ? `<strong>${escapeHtml(recommendation.title)}</strong><div class="ai-recommendation-content">${planStepContentHtml(recommendation.content)}</div><div class="ai-recommendation-meta">${escapeHtml(recommendation.subjectName)} · 우선순위 ${recommendation.priority}/5</div>`
-      : '<div><strong>아직 생성된 추천이 없습니다.</strong><span>현재 선택한 과목의 추천 생성 버튼을 눌러 주세요.</span></div>';
+      : '<div><strong>아직 생성된 추천이 없습니다.</strong><span>현재 선택한 과목의 AI 다음 학습 추천 생성 버튼을 눌러 주세요.</span></div>';
   }
 
   function renderPlanCriteria() {

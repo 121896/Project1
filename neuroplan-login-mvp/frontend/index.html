@@ -700,6 +700,8 @@
     .ai-quota-foot { margin-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 10px; }
     .ai-action-with-usage { display: inline-flex; align-items: center; flex-direction: column; gap: 5px; }
     .ai-action-with-usage .ai-average-note { width: 100%; text-align: center; }
+    .ai-recommendation-card .ai-action-with-usage { min-width: 190px; }
+    #generateRecommendation { min-width: 190px; }
     .quiz-launch-actions .ai-action-with-usage { min-width: 112px; }
     .quiz-launch-actions .ai-action-with-usage .button,
     .wrong-note-actions .ai-action-with-usage .button { min-height: 36px; }
@@ -1079,6 +1081,9 @@
       .hero { padding: 26px 21px; border-radius: 24px; }
       .hero h1 { font-size: 31px; }
       .content-card { padding: 19px; }
+      .ai-recommendation-card .card-head { flex-wrap: wrap; }
+      .ai-recommendation-card .ai-action-with-usage { width: 100%; min-width: 0; }
+      #generateRecommendation { width: 100%; min-width: 0; }
       .weekly-summary { grid-template-columns: 1fr; }
       .metric-grid { grid-template-columns: 1fr; }
       .metric-card { min-height: 118px; }
@@ -1318,11 +1323,11 @@
       <div class="card-head">
         <div><h2 id="aiRecommendationTitle">AI 다음 학습 추천</h2><p>정답률, 미해결 오답과 완료 단계를 바탕으로 다음 재학습 항목을 추천합니다.</p></div>
         <div class="ai-action-with-usage">
-          <button class="button secondary small" id="generateRecommendation" type="button" disabled>추천 생성</button>
+          <button class="button secondary small" id="generateRecommendation" type="button" disabled>AI 다음 학습 추천 생성</button>
           <span class="ai-average-note" data-ai-average="WEEKLY_INSIGHT">평균 사용 토큰 확인 중</span>
         </div>
       </div>
-      <div id="aiRecommendationResult" class="empty-state"><div><strong>아직 생성된 추천이 없습니다.</strong><span>과목을 선택하고 추천 생성 버튼을 눌러 주세요.</span></div></div>
+      <div id="aiRecommendationResult" class="empty-state"><div><strong>아직 생성된 추천이 없습니다.</strong><span>과목을 선택하고 AI 다음 학습 추천 생성 버튼을 눌러 주세요.</span></div></div>
     </section>
 
     <section class="insight-grid" data-page-section="dashboard" aria-label="학습 상세 통계">

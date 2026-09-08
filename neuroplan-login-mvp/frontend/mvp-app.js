@@ -234,7 +234,7 @@
       const numbered = line.match(/^(?:\d{1,2}단계(?:\s*\([^)]*\))?\s*[:.)-]?|\d{1,2}[.)]|[①-⑳]|(?:첫째|둘째|셋째|넷째|다섯째)\s*[:.)-]?)[\s\u00a0]*(.+)$/s);
       if (numbered) {
         // AI가 번호 뒤에 `,`를 붙여도 번호 배지와 본문 사이에는 표시하지 않습니다.
-        actions.push(numbered[1].replace(/^[,，]\s*/, "").trim());
+        actions.push(numbered[1].replace(/^[\s,，]+/, "").trim());
       }
       else if (actions.length) actions[actions.length - 1] = `${actions[actions.length - 1]} ${line}`.trim();
       else intro.push(line);

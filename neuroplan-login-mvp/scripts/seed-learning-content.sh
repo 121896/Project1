@@ -11,14 +11,17 @@ DB_USERNAME="${DB_USERNAME:-ir_app}"
 command -v mariadb >/dev/null 2>&1 || { echo "[FAIL] mariadb client not found" >&2; exit 1; }
 
 echo "[INFO] idempotent learning seed: ${DB_USERNAME}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
-echo "[INFO] DDL is not executed; the DB password is requested directly by mariadb"
-mariadb --no-defaults --disable-ssl \
+echo "[INFO] base subjects and certification subjects are seeded; DDL is not executed"
+{
+  cat "$APP_DIR/db/01-seed-learning-content.sql"
+  printf '\n'
+  cat "$APP_DIR/db/05-seed-certification-subjects.sql"
+} | mariadb --no-defaults --disable-ssl \
   --protocol=TCP \
   -h "$DB_HOST" \
   -P "$DB_PORT" \
   -u "$DB_USERNAME" \
   -p \
-  "$DB_NAME" \
-  < "$APP_DIR/db/01-seed-learning-content.sql"
+  "$DB_NAME"
 
-echo "[PASS] learning subjects and minimum diagnosis content are ready"
+echo "[PASS] learning subjects, certification subjects, and minimum diagnosis content are ready"

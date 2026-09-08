@@ -336,11 +336,13 @@ public class LearningController {
     @GetMapping("/diagnosis/questions")
     public List<QuestionResponse> questions(
             @RequestParam String subjectCode,
+            @RequestParam(defaultValue = "false") boolean random,
             HttpServletRequest request
     ) {
         currentUserService.require(request);
         String code = subjectCode.trim().toUpperCase(Locale.ROOT);
-        List<QuestionResponse> result = jdbcTemplate.query("""
+        String orderBy = random ? "RAND()" : "q.question_no";
+        List<QuestionResponse> result = jdbcTemplate.query(("""
                 SELECT q.id, q.question_no, q.difficulty, q.question_text, s.code, s.name
                   FROM diagnosis_questions q
                   JOIN subjects s ON s.id = q.subject_id
@@ -356,9 +358,9 @@ public class LearningController {
                    AND q.is_active = TRUE
                    AND option_stats.option_count >= 2
                    AND option_stats.correct_count = 1
-                 ORDER BY q.question_no
+                 ORDER BY %s
                  LIMIT ?
-                """, (rs, rowNum) -> {
+                """).formatted(orderBy), (rs, rowNum) -> {
             long questionId = rs.getLong("id");
             List<OptionResponse> options = jdbcTemplate.query("""
                     SELECT id, option_no, option_text

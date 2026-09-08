@@ -521,6 +521,11 @@
     #adminSubjectList, #adminQuestionList { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .admin-operations-grid { grid-template-columns: 1fr; }
     .admin-operations-grid > .content-card { min-width: 0; }
+    .admin-content-grid { grid-template-columns: 1fr; }
+    .admin-question-card { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, 1fr); gap: 16px 22px; align-items: start; }
+    .admin-question-card > .card-head { grid-column: 1 / -1; }
+    .admin-question-card > #adminQuestionForm { grid-column: 1; }
+    .admin-question-card > #adminQuestionList { grid-column: 2; grid-row: 2; max-height: 430px; margin-top: 0 !important; overflow-y: auto; padding-right: 4px; }
 
     .main-grid { margin-top: 16px; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr); gap: 16px; }
     .content-card { padding: 24px; }
@@ -994,6 +999,9 @@
     body.dark-mode .admin-table th { background: #1b3025; }
     body.dark-mode .problem-bank-cell { background: #1a2c23; }
     @media (max-width: 900px) {
+      .admin-question-card { grid-template-columns: 1fr; }
+      .admin-question-card > #adminQuestionForm, .admin-question-card > #adminQuestionList { grid-column: 1; }
+      .admin-question-card > #adminQuestionList { grid-row: auto; max-height: 300px; }
       #adminSubjectForm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       #adminSubjectForm .button { grid-column: 1 / -1; }
       #adminQuestionForm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1416,7 +1424,7 @@
         <div id="adminAiOperations"><span class="metric-caption">AI 운영 현황을 불러오는 중입니다.</span></div>
       </article>
     </section>
-    <section class="settings-grid page-title-card" aria-label="학습 콘텐츠 관리">
+    <section class="settings-grid page-title-card admin-content-grid" aria-label="학습 콘텐츠 관리">
       <article class="content-card">
         <div class="card-head"><div><h2>과목 등록</h2><p>새 학습 과목을 활성 상태로 등록합니다.</p></div></div>
         <form class="settings-form" id="adminSubjectForm">
@@ -1426,7 +1434,7 @@
         </form>
         <div class="history-list" id="adminSubjectList" style="margin-top:16px"></div>
       </article>
-      <article class="content-card">
+      <article class="content-card admin-question-card">
         <div class="card-head"><div><h2>문제 등록</h2><p>보기 앞에 <strong>*</strong>를 붙이면 정답으로 등록됩니다.</p></div></div>
         <form class="settings-form" id="adminQuestionForm">
           <div class="field"><label for="adminQuestionSubject">과목</label><select id="adminQuestionSubject" required></select></div>

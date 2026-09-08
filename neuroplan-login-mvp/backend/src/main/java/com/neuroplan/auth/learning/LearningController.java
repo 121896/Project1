@@ -143,7 +143,13 @@ public class LearningController {
             if (!uniqueCodes.add(code)) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "같은 과목을 중복해서 선택할 수 없습니다.");
             }
-            LearningLevel level = parseLevel(selection.learningLevel());
+            boolean certificationSubject = isCertificationSubject(code);
+            LearningLevel level = certificationSubject
+                    ? LearningLevel.BEGINNER
+                    : parseLevel(selection.learningLevel());
+            String focusTopic = isPracticalCertification(code)
+                    ? normalizeFocusTopic(selection.focusTopic())
+                    : null;
             SubjectResponse subject = jdbcTemplate.query("""
                     SELECT id, code, name
                       FROM subjects
@@ -155,7 +161,7 @@ public class LearningController {
                     HttpStatus.BAD_REQUEST,
                     "사용할 수 없는 과목입니다: " + code
             ));
-            selections.add(new ResolvedSelection(subject, level));
+            selections.add(new ResolvedSelection(subject, level, focusTopic));
         }
 
         jdbcTemplate.update("DELETE FROM user_subjects WHERE user_id = ?", user.id());
@@ -163,13 +169,14 @@ public class LearningController {
             ResolvedSelection selection = selections.get(index);
             jdbcTemplate.update("""
                     INSERT INTO user_subjects (
-                        user_id, slot_no, subject_id, learning_level, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
+                        user_id, slot_no, subject_id, learning_level, focus_topic, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
                     """,
                     user.id(),
                     index + 1,
                     selection.subject().id(),
-                    selection.level().name()
+                    selection.level().name(),
+                    selection.focusTopic()
             );
         }
         return profileFor(user.id());
@@ -195,7 +202,9 @@ public class LearningController {
                             HttpStatus.BAD_REQUEST,
                             "학습 프로필에 선택한 과목이 없습니다: " + subjectCode
                     ));
-        String title = focus.subjectName() + " " + focus.levelLabel() + " 오늘의 학습 플랜";
+        String focusLabel = focus.focusTopic() == null || focus.focusTopic().isBlank()
+                ? "" : " · " + focus.focusTopic();
+        String title = focus.subjectName() + " " + focus.levelLabel() + focusLabel + " 오늘의 학습 플랜";
         Long planId = findTodayPlanId(user.id(), focus.subjectId());
         if (planId == null) {
             try {
@@ -516,20 +525,22 @@ public class LearningController {
 
     private List<ProfileSubjectResponse> profileFor(long userId) {
         return jdbcTemplate.query("""
-                SELECT us.slot_no, us.subject_id, us.learning_level, s.code, s.name
+                SELECT us.slot_no, us.subject_id, us.learning_level, us.focus_topic, s.code, s.name
                   FROM user_subjects us
                   JOIN subjects s ON s.id = us.subject_id
                  WHERE us.user_id = ?
                  ORDER BY us.slot_no
                 """, (rs, rowNum) -> {
             LearningLevel level = parseLevel(rs.getString("learning_level"));
+            String code = rs.getString("code");
             return new ProfileSubjectResponse(
                     rs.getInt("slot_no"),
                     rs.getLong("subject_id"),
-                    rs.getString("code"),
+                    code,
                     rs.getString("name"),
                     level.name(),
-                    level.label
+                    certificationStageLabel(code, level.label),
+                    rs.getString("focus_topic")
             );
         }, userId);
     }
@@ -918,6 +929,34 @@ public class LearningController {
         }
     }
 
+    private boolean isCertificationSubject(String code) {
+        return String.valueOf(code).toUpperCase(Locale.ROOT).startsWith("INFORMATION_PROCESSING_")
+                || String.valueOf(code).toUpperCase(Locale.ROOT).startsWith("LINUX_MASTER_2_");
+    }
+
+    private boolean isPracticalCertification(String code) {
+        return "INFORMATION_PROCESSING_PRACTICAL".equalsIgnoreCase(code);
+    }
+
+    private String certificationStageLabel(String code, String fallback) {
+        return switch (String.valueOf(code).toUpperCase(Locale.ROOT)) {
+            case "INFORMATION_PROCESSING_WRITTEN" -> "필기";
+            case "INFORMATION_PROCESSING_PRACTICAL" -> "실기";
+            case "LINUX_MASTER_2_FIRST" -> "1차";
+            case "LINUX_MASTER_2_SECOND" -> "2차";
+            default -> fallback;
+        };
+    }
+
+    private String normalizeFocusTopic(String value) {
+        String normalized = value == null ? "" : value.trim();
+        if (normalized.isBlank()) return "전체 범위";
+        if (normalized.length() > 50) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "시험 영역은 50자 이내로 입력해 주세요.");
+        }
+        return normalized;
+    }
+
     private enum LearningLevel {
         BEGINNER("초급"),
         INTERMEDIATE("중급"),
@@ -938,7 +977,8 @@ public class LearningController {
             String subjectCode,
             String subjectName,
             String learningLevel,
-            String levelLabel
+            String levelLabel,
+            String focusTopic
     ) {}
 
     public record ProfileUpdateRequest(
@@ -947,7 +987,8 @@ public class LearningController {
 
     public record SubjectSelectionRequest(
             @NotBlank String code,
-            @NotBlank String learningLevel
+            @NotBlank String learningLevel,
+            String focusTopic
     ) {}
 
     public record LearningStateResponse(
@@ -1080,7 +1121,7 @@ public class LearningController {
             String explanation
     ) {}
 
-    private record ResolvedSelection(SubjectResponse subject, LearningLevel level) {}
+    private record ResolvedSelection(SubjectResponse subject, LearningLevel level, String focusTopic) {}
     private record PlanOwner(long planId, long subjectId) {}
     private record PlanRow(
             long id,

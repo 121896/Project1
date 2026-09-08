@@ -1825,6 +1825,7 @@
             : fallbackQuestions;
           aiQuizRunId = useAi ? 1 : null;
         }
+        questions = questions.map(question => ({ ...question, _quizSubjectCode: code }));
         quizMode = useShortAnswer ? "AI_SHORT" : useAi ? "AI" : useWrongNotes ? "WRONG" : "BANK";
         quizAnswers = [];
         quizIndex = 0;
@@ -1943,6 +1944,14 @@
   function restoreQuizSetForSubject(code) {
     const cached = quizSetsBySubject.get(code);
     if (!cached) {
+      questions = [];
+      quizMode = "BANK";
+      aiQuizRunId = null;
+      quizAnswers = [];
+      quizIndex = 0;
+      quizScore = 0;
+      chosenAnswer = null;
+      answerChecked = false;
       $("#quizWorkspace").hidden = true;
       return;
     }
@@ -1966,7 +1975,7 @@
   }
 
   function storeQuizSet(code) {
-    if (!code || !questions.length) return;
+    if (!code || !questions.length || !questions.every(question => question._quizSubjectCode === code)) return;
     quizSetsBySubject.set(code, {
       mode: quizMode,
       runId: aiQuizRunId,

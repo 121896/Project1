@@ -819,10 +819,17 @@
     .choice-heading { margin: 0 0 9px; font-size: 13px; }
     .choice-description { margin: 0 0 13px; color: var(--muted); font-size: 11px; }
     .choice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+    #subjectChoices { display: grid; gap: 20px; }
     .subject-choice-section { display: grid; gap: 10px; }
     .subject-choice-section + .subject-choice-divider { margin-top: 20px; }
     .subject-choice-divider { height: 1px; background: var(--line); }
     .subject-choice-section-title { margin: 0; color: var(--navy); font-size: 11px; font-weight: 900; letter-spacing: -.01em; }
+    .subject-level-choice-list { display: grid; gap: 9px; }
+    .subject-level-choice-row { display: grid; grid-template-columns: minmax(145px, .85fr) minmax(0, 2fr); gap: 9px; align-items: stretch; }
+    .subject-choice-label { min-height: 64px; align-content: center; justify-items: start; text-align: left; }
+    .subject-choice-label strong { font-size: 13px; }
+    .subject-choice-label span { margin-top: 4px; }
+    .subject-level-choice-buttons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
     .certification-choice-groups { display: grid; gap: 12px; }
     .certification-choice-group { display: grid; gap: 7px; }
     .certification-choice-group-title { margin: 0; color: var(--muted); font-size: 10px; font-weight: 900; }
@@ -1115,6 +1122,7 @@
       .user-avatar { width: 24px; height: 24px; }
       .choice-grid { grid-template-columns: 1fr; }
       .certification-choice-row { grid-template-columns: 1fr; }
+      .subject-level-choice-row { grid-template-columns: 1fr; }
       .subject-level-buttons { grid-template-columns: 1fr; }
       .choice { min-height: 58px; }
       .modal-backdrop { padding: 12px; }
@@ -1581,7 +1589,7 @@
       <div class="modal-body">
         <h3 class="choice-heading">학습 과목</h3>
         <p class="choice-description">최소 1개, 최대 3개를 선택해 주세요.</p>
-        <div class="choice-grid" id="subjectChoices"><div class="subject-level-empty">과목 목록을 불러오는 중입니다.</div></div>
+        <div id="subjectChoices"><div class="subject-level-empty">과목 목록을 불러오는 중입니다.</div></div>
 
         <div class="per-subject-levels" id="subjectLevelSettings">
           <div class="subject-level-empty">과목을 선택하면 과목별 수준 설정이 나타납니다.</div>

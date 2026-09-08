@@ -707,7 +707,7 @@
       return groups;
     }, {});
     $("#adminProblemBankList").innerHTML = adminProblemBank.length
-      ? Object.entries(problemBankBySubject).map(([subjectName, items]) => `<section class="problem-bank-subject"><strong class="problem-bank-subject-title">${escapeHtml(subjectName)}</strong><div class="problem-bank-grid">${items.slice().sort((a, b) => difficultyOrder.indexOf(a.difficulty) - difficultyOrder.indexOf(b.difficulty)).map(item => `<article class="problem-bank-cell"><strong>${escapeHtml(difficultyLabels[item.difficulty] || item.difficulty)}</strong><span>활성 ${item.activeCount}개 · 비활성 ${item.inactiveCount}개<br>전체 ${item.totalCount}개 · 최근 ${item.lastCreatedAt ? new Date(item.lastCreatedAt).toLocaleDateString("ko-KR") : "없음"}</span></article>`).join("")}</div></section>`).join("")
+      ? Object.entries(problemBankBySubject).map(([subjectName, items]) => `<section class="problem-bank-subject"><strong class="problem-bank-subject-title">${escapeHtml(subjectName)}</strong><div class="problem-bank-grid">${difficultyOrder.map(level => { const item = items.find(entry => entry.difficulty === level) || { activeCount: 0, inactiveCount: 0, totalCount: 0, lastCreatedAt: null }; return `<article class="problem-bank-cell"><strong>${difficultyLabels[level]}</strong><span>활성 ${item.activeCount}개 · 비활성 ${item.inactiveCount}개<br>전체 ${item.totalCount}개 · 최근 ${item.lastCreatedAt ? new Date(item.lastCreatedAt).toLocaleDateString("ko-KR") : "없음"}</span></article>`; }).join("")}</div></section>`).join("")
       : '<span class="metric-caption">문제은행 현황을 불러오지 못했습니다.</span>';
     const ai = adminAiOperations;
     $("#adminAiOperations").innerHTML = ai

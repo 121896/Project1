@@ -626,15 +626,11 @@
     }
     .plan-history-detail {
       overflow: hidden;
-      animation: plan-history-detail-open .34s cubic-bezier(.22,.8,.26,1) both;
     }
+    .plan-history-detail.is-opening,
     .plan-history-detail.is-collapsing {
       animation: none;
       transition: height .42s cubic-bezier(.22,.72,.28,1), opacity .24s ease-out, transform .42s cubic-bezier(.22,.72,.28,1);
-    }
-    @keyframes plan-history-detail-open {
-      from { max-height: 0; opacity: 0; transform: translateY(-8px); }
-      to { max-height: 720px; opacity: 1; transform: translateY(0); }
     }
     .check-button {
       width: 34px;
@@ -782,7 +778,11 @@
     }
     .modal-body { padding: 24px 25px 26px; }
     .quiz-workspace { margin-top: 18px; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: var(--paper); box-shadow: 0 14px 34px rgba(47,86,72,.08); }
-    .quiz-workspace.subject-switching { animation: quiz-subject-switch .42s cubic-bezier(.22,.72,.28,1) both; }
+    .quiz-callout.subject-switching,
+    .quiz-workspace.subject-switching,
+    #planContent.subject-switching,
+    #planEmpty.subject-switching,
+    #wrongNoteList.subject-switching { animation: quiz-subject-switch .42s cubic-bezier(.22,.72,.28,1) both; }
     @keyframes quiz-subject-switch {
       from { opacity: 0; transform: translateY(12px); }
       to { opacity: 1; transform: translateY(0); }
@@ -886,6 +886,10 @@
     .quiz-progress .subject-track span { background: var(--teal); }
     .question-kicker { color: var(--blue); font-size: 11px; font-weight: 900; }
     .question-title { margin: 8px 0 18px; font-size: 19px; line-height: 1.5; letter-spacing: -.035em; }
+    .question-title > p { margin: 0; }
+    .question-code-block { margin: 13px 0 0; border: 1px solid #c9ddd1; border-radius: 12px; overflow: hidden; background: #173128; }
+    .question-code-language { display: block; padding: 6px 11px; color: #b9dfc8; background: #234338; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .question-code-block pre { margin: 0; padding: 13px 14px; overflow-x: auto; color: #edf8f0; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.6; white-space: pre; }
     .answers { display: grid; gap: 9px; }
     .short-answer-input { width: 100%; min-height: 124px; padding: 13px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fbfefc; line-height: 1.55; resize: vertical; }
     .short-answer-input:disabled { color: var(--muted); background: var(--sky-soft); }
@@ -1382,7 +1386,7 @@
         <span class="today-tag">5문제</span>
       </div>
       <div class="plan-subject-tabs" id="quizSubjectTabs" aria-label="문제 과목 선택"></div>
-      <div class="quiz-callout">
+      <div class="quiz-callout" id="quizLaunchPanel">
         <div><strong id="quizLaunchTitle">과목을 선택해 주세요</strong><p id="quizGuide">학습 프로필에 등록한 과목 중 하나를 선택해 문제은행 또는 AI 문제를 시작할 수 있어요.</p></div>
         <div class="quiz-launch-actions">
           <button class="button secondary small" id="quizButton" type="button" disabled>기존 문제 풀기</button>
@@ -1406,7 +1410,7 @@
         </div>
         <div id="questionArea">
           <span class="question-kicker" id="questionSubject">Kubernetes · 기본</span>
-          <h3 class="question-title" id="questionText"></h3>
+          <div class="question-title" id="questionText" role="heading" aria-level="3"></div>
           <div class="answers" id="answerList"></div>
           <div class="explanation" id="explanation" hidden></div>
           <div class="quiz-footer"><button class="button primary" id="nextQuestion" type="button" disabled>답안 제출</button><button class="button ghost small" id="reportQuestionButton" type="button">문제 신고</button></div>

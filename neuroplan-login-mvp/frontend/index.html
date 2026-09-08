@@ -145,8 +145,11 @@
     [data-page-section][hidden] { display: none !important; }
     [data-page-section].page-swipe-enter-right { animation: page-swipe-enter-right .28s ease-out both; }
     [data-page-section].page-swipe-enter-left { animation: page-swipe-enter-left .28s ease-out both; }
-    .dashboard.home-rise-in { animation: dashboard-home-rise .42s cubic-bezier(.22,.8,.26,1) both; }
-    [data-page-section].page-refresh-rise { animation: page-refresh-rise .34s cubic-bezier(.22,.8,.26,1) both; }
+    .dashboard.home-rise-in { animation: dashboard-home-rise .72s cubic-bezier(.22,.8,.26,1) both; }
+    [data-page-section].page-refresh-rise,
+    .page-refresh-rise-item { animation: page-refresh-rise .72s cubic-bezier(.22,.8,.26,1) both; }
+    [data-page-section].page-refresh-rise,
+    .page-refresh-rise-item { animation-delay: var(--refresh-delay, 0ms); }
     @keyframes page-swipe-enter-right {
       from { opacity: 0; transform: translateX(30px); }
       to { opacity: 1; transform: translateX(0); }
@@ -160,7 +163,7 @@
       to { opacity: 1; transform: translateY(0); }
     }
     @keyframes page-refresh-rise {
-      from { opacity: .35; transform: translateY(24px); }
+      from { opacity: .12; transform: translateY(30px); }
       to { opacity: 1; transform: translateY(0); }
     }
     @keyframes notification-modal-rise {
@@ -187,6 +190,7 @@
       [data-page-section].page-swipe-enter-right,
       [data-page-section].page-swipe-enter-left,
       [data-page-section].page-refresh-rise,
+      .page-refresh-rise-item,
       #notificationModal:not([hidden]) .modal,
       #profileModal:not([hidden]) .modal,
       #reauthModal:not([hidden]) .modal,

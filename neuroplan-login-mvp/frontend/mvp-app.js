@@ -1273,8 +1273,7 @@
       return (aIndex < 0 ? certificationOrder.length : aIndex) - (bIndex < 0 ? certificationOrder.length : bIndex);
     });
     const generalMarkup = generalSubjects.length
-      ? `<section class="subject-choice-section" aria-labelledby="generalSubjectTitle">
-          <h4 class="subject-choice-section-title" id="generalSubjectTitle">일반 과목</h4>
+      ? `<section class="subject-choice-section" aria-label="학습 과목">
           <div class="choice-grid">${generalSubjects.map(choiceMarkup).join("")}</div>
         </section>`
       : "";
@@ -1302,7 +1301,8 @@
     }
     const descriptions = { "초급": "개념부터", "중급": "실습 중심", "고급": "설계 중심" };
     const practicalTopics = ["전체 범위", "프로그래밍", "SQL", "운영체제", "네트워크", "보안"];
-    $("#subjectLevelSettings").innerHTML = draftSubjects.map(code => `
+    $("#subjectLevelSettings").innerHTML = `<h3 class="choice-heading subject-level-settings-title">선택한 과목 수준 선택</h3>
+      <p class="choice-description">선택한 일반 과목의 수준을 정해 주세요.</p>${draftSubjects.map(code => `
       <section class="subject-level-row" aria-label="${escapeHtml(subjectName(code))} ${isPracticalCertification(code) ? "시험 영역" : isCertificationSubject(code) ? "시험 단계" : "수준"} 설정">
         <div class="subject-level-head"><strong>${escapeHtml(subjectName(code))}</strong><span>${isCertificationSubject(code) ? (isPracticalCertification(code) ? `${escapeHtml(draftSubjectFocus[code] || "전체 범위")} 선택됨` : "시험 과목은 난이도를 선택하지 않습니다") : (draftSubjectLevels[code] ? `${draftSubjectLevels[code]} 선택됨` : "수준을 선택해 주세요")}</span></div>
         ${isPracticalCertification(code) ? `<div class="subject-level-buttons focus-topic-buttons">
@@ -1313,7 +1313,7 @@
               <strong>${level}</strong><span>${descriptions[level]}</span>
             </button>`).join("")}
         </div>`}
-      </section>`).join("");
+      </section>`).join("")}`;
   }
 
   function renderSubjectTabs() {

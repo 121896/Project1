@@ -819,6 +819,14 @@
     .choice-heading { margin: 0 0 9px; font-size: 13px; }
     .choice-description { margin: 0 0 13px; color: var(--muted); font-size: 11px; }
     .choice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+    .subject-choice-section { display: grid; gap: 10px; }
+    .subject-choice-section + .subject-choice-divider { margin-top: 20px; }
+    .subject-choice-divider { height: 1px; background: var(--line); }
+    .subject-choice-section-title { margin: 0; color: var(--navy); font-size: 11px; font-weight: 900; letter-spacing: -.01em; }
+    .certification-choice-groups { display: grid; gap: 12px; }
+    .certification-choice-group { display: grid; gap: 7px; }
+    .certification-choice-group-title { margin: 0; color: var(--muted); font-size: 10px; font-weight: 900; }
+    .certification-choice-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
     .choice {
       min-height: 72px;
       padding: 12px;
@@ -1105,6 +1113,7 @@
       .user-chip { padding: 0 8px; gap: 5px; font-size: 12px; }
       .user-avatar { width: 24px; height: 24px; }
       .choice-grid { grid-template-columns: 1fr; }
+      .certification-choice-row { grid-template-columns: 1fr; }
       .subject-level-buttons { grid-template-columns: 1fr; }
       .choice { min-height: 58px; }
       .modal-backdrop { padding: 12px; }

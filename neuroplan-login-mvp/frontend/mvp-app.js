@@ -1230,10 +1230,47 @@
       $("#subjectChoices").innerHTML = '<div class="subject-level-empty">활성 과목이 없습니다. DB의 subjects 데이터를 확인해 주세요.</div>';
       return;
     }
-    $("#subjectChoices").innerHTML = subjectCatalog.map(subject => `
+    const choiceMarkup = subject => `
       <button class="choice${draftSubjects.includes(subject.code) ? " selected" : ""}" type="button" data-subject="${escapeHtml(subject.code)}">
         <strong>${escapeHtml(subject.name)}</strong><span>${escapeHtml(subjectDescriptions[subject.code] || "맞춤 학습")}</span>
-      </button>`).join("");
+      </button>`;
+    const generalSubjects = subjectCatalog.filter(subject => !isCertificationSubject(subject.code));
+    const certificationSubjects = subjectCatalog.filter(subject => isCertificationSubject(subject.code));
+    const certificationOrder = ["리눅스마스터 2급", "정보처리기사"];
+    const groups = new Map();
+    certificationSubjects.forEach(subject => {
+      const title = subject.code.startsWith("LINUX_MASTER_2_")
+        ? "리눅스마스터 2급"
+        : subject.code.startsWith("INFORMATION_PROCESSING_") ? "정보처리기사" : "자격증 과목";
+      if (!groups.has(title)) groups.set(title, []);
+      groups.get(title).push(subject);
+    });
+    const orderedGroups = [...groups.entries()].sort((a, b) => {
+      const aIndex = certificationOrder.indexOf(a[0]);
+      const bIndex = certificationOrder.indexOf(b[0]);
+      return (aIndex < 0 ? certificationOrder.length : aIndex) - (bIndex < 0 ? certificationOrder.length : bIndex);
+    });
+    const generalMarkup = generalSubjects.length
+      ? `<section class="subject-choice-section" aria-labelledby="generalSubjectTitle">
+          <h4 class="subject-choice-section-title" id="generalSubjectTitle">일반 과목</h4>
+          <div class="choice-grid">${generalSubjects.map(choiceMarkup).join("")}</div>
+        </section>`
+      : "";
+    const certificationMarkup = orderedGroups.length
+      ? `<section class="subject-choice-section" aria-labelledby="certificationSubjectTitle">
+          <h4 class="subject-choice-section-title" id="certificationSubjectTitle">자격증 과목</h4>
+          <div class="certification-choice-groups">
+            ${orderedGroups.map(([title, subjects]) => `
+              <div class="certification-choice-group">
+                <h5 class="certification-choice-group-title">${escapeHtml(title)}</h5>
+                <div class="certification-choice-row">${subjects.map(choiceMarkup).join("")}</div>
+              </div>`).join("")}
+          </div>
+        </section>`
+      : "";
+    $("#subjectChoices").innerHTML = generalMarkup && certificationMarkup
+      ? `${generalMarkup}<div class="subject-choice-divider" role="separator"></div>${certificationMarkup}`
+      : generalMarkup || certificationMarkup;
   }
 
   function renderSubjectLevelSettings() {

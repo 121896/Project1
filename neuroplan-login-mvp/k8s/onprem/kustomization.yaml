@@ -9,7 +9,7 @@ resources:
 
 images:
   - name: harbor.nplan.local:80/neuroplan/frontend
-    newTag: "76aa212"
+    newTag: "4a80673"
 
   - name: harbor.nplan.local:80/neuroplan/backend
     newTag: "f22e59d"

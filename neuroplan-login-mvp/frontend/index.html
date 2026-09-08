@@ -819,17 +819,11 @@
     .choice-heading { margin: 0 0 9px; font-size: 13px; }
     .choice-description { margin: 0 0 13px; color: var(--muted); font-size: 11px; }
     .choice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
-    #subjectChoices { display: grid; gap: 20px; }
+    #subjectChoices { display: grid; gap: 16px; }
     .subject-choice-section { display: grid; gap: 10px; }
-    .subject-choice-section + .subject-choice-divider { margin-top: 20px; }
+    .subject-choice-section + .subject-choice-divider { margin-top: 2px; }
     .subject-choice-divider { height: 1px; background: var(--line); }
     .subject-choice-section-title { margin: 0; color: var(--navy); font-size: 11px; font-weight: 900; letter-spacing: -.01em; }
-    .subject-level-choice-list { display: grid; gap: 9px; }
-    .subject-level-choice-row { display: grid; grid-template-columns: minmax(145px, .85fr) minmax(0, 2fr); gap: 9px; align-items: stretch; }
-    .subject-choice-label { min-height: 64px; align-content: center; justify-items: start; text-align: left; }
-    .subject-choice-label strong { font-size: 13px; }
-    .subject-choice-label span { margin-top: 4px; }
-    .subject-level-choice-buttons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
     .certification-choice-groups { display: grid; gap: 12px; }
     .certification-choice-group { display: grid; gap: 7px; }
     .certification-choice-group-title { margin: 0; color: var(--muted); font-size: 10px; font-weight: 900; }
@@ -1122,7 +1116,6 @@
       .user-avatar { width: 24px; height: 24px; }
       .choice-grid { grid-template-columns: 1fr; }
       .certification-choice-row { grid-template-columns: 1fr; }
-      .subject-level-choice-row { grid-template-columns: 1fr; }
       .subject-level-buttons { grid-template-columns: 1fr; }
       .choice { min-height: 58px; }
       .modal-backdrop { padding: 12px; }
@@ -1224,7 +1217,7 @@
         <p id="heroDescription">과목과 수준을 설정하면 오늘 집중할 학습 플랜을 만들고, 완료한 학습과 문제 결과를 대시보드에 바로 반영합니다.</p>
         <div class="hero-actions">
           <button class="button primary" id="mainAction" type="button">로그인하고 시작하기</button>
-          <button class="button secondary" id="profileAction" type="button">과목·수준 설정</button>
+          <button class="button secondary" id="profileAction" type="button">학습 프로필 설정</button>
         </div>
       </div>
       <div class="hero-plan">

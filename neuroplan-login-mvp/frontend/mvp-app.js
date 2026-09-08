@@ -363,7 +363,7 @@
     while ((match = codeFence.exec(source))) {
       fragments.push(prose(source.slice(cursor, match.index)));
       const language = match[1] ? `<span class="question-code-language">${escapeHtml(match[1])}</span>` : "";
-      fragments.push(`<div class="question-code-block">${language}<pre><code>${escapeHtml(match[2].trim())}</code></pre></div>`);
+      fragments.push(`<div class="question-code-block" aria-label="문제 코드">${language}<pre><code>${escapeHtml(match[2].trim())}</code></pre></div>`);
       cursor = match.index + match[0].length;
     }
     fragments.push(prose(source.slice(cursor)));

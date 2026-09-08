@@ -102,7 +102,7 @@
     if (animate && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       clearTimeout(themeTransitionTimer);
       document.documentElement.classList.add("theme-transition");
-      themeTransitionTimer = setTimeout(() => document.documentElement.classList.remove("theme-transition"), 320);
+      themeTransitionTimer = setTimeout(() => document.documentElement.classList.remove("theme-transition"), 700);
     }
     document.body.classList.toggle("dark-mode", darkMode);
     localStorage.setItem(themeStorageKey, darkMode ? "dark" : "light");

@@ -515,14 +515,19 @@
     #adminSubjectForm { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 12px; }
     #adminSubjectForm .field, #adminQuestionForm .field { margin-bottom: 0; }
     #adminSubjectForm .button { min-width: 120px; }
-    #adminQuestionForm { grid-template-columns: minmax(150px, .8fr) minmax(100px, .45fr) minmax(220px, 1.4fr) minmax(220px, 1.2fr) minmax(180px, 1fr); align-items: end; gap: 12px; }
+    #adminQuestionForm { grid-template-columns: minmax(0, 1.1fr) minmax(0, .7fr) minmax(0, 1.5fr) minmax(0, 1.35fr); align-items: end; gap: 12px; }
     #adminQuestionForm .field:nth-child(4), #adminQuestionForm .field:nth-child(5) { grid-column: span 2; }
     #adminQuestionForm .admin-user-actions { grid-column: 1 / -1; }
     #adminSubjectList, #adminQuestionList { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #adminQuestionList .history-item { min-width: 0; display: flex; align-items: flex-start; gap: 8px; }
+    #adminQuestionList .history-item > div:first-child { min-width: 0; }
+    #adminQuestionList .history-item strong, #adminQuestionList .history-item p { overflow-wrap: anywhere; }
+    #adminQuestionList .admin-user-actions { flex: 0 0 74px; flex-direction: column; }
+    #adminQuestionList .admin-user-actions .button { width: 74px; white-space: normal; }
     .admin-operations-grid { grid-template-columns: 1fr; }
     .admin-operations-grid > .content-card { min-width: 0; }
     .admin-content-grid { grid-template-columns: 1fr; }
-    .admin-question-card { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, 1fr); gap: 16px 22px; align-items: start; }
+    .admin-question-card { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(360px, 1.2fr); gap: 16px 22px; align-items: start; }
     .admin-question-card > .card-head { grid-column: 1 / -1; }
     .admin-question-card > #adminQuestionForm { grid-column: 1; }
     .admin-question-card > #adminQuestionList { grid-column: 2; grid-row: 2; max-height: 430px; margin-top: 0 !important; overflow-y: auto; padding-right: 4px; }

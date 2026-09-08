@@ -386,6 +386,11 @@ public class AdminController {
     ) {
         adminAccessService.require(request);
         String code = body.code().trim().toUpperCase(Locale.ROOT);
+        Integer duplicateCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM subjects WHERE code = ?", Integer.class, code);
+        if (duplicateCount != null && duplicateCount > 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "이미 등록된 과목 코드입니다. 다른 코드를 입력해 주세요.");
+        }
         jdbcTemplate.update("""
                 INSERT INTO subjects (code, name, is_active, created_at)
                 VALUES (?, ?, ?, CURRENT_TIMESTAMP(6))
@@ -661,7 +666,11 @@ public class AdminController {
 
     public record AdminSubjectResponse(long id, String code, String name, boolean active) {}
 
-    public record AdminSubjectRequest(@NotBlank String code, @NotBlank String name, boolean active) {}
+    public record AdminSubjectRequest(
+            @NotBlank @Size(max = 30) String code,
+            @NotBlank @Size(max = 50) String name,
+            boolean active
+    ) {}
 
     public record AdminOptionRequest(@NotBlank String text, boolean correct) {}
 

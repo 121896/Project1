@@ -7,6 +7,7 @@ import java.util.Map;
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -23,6 +24,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(DuplicateKeyException.class)
     ResponseEntity<Map<String, Object>> handleDuplicate(DuplicateKeyException exception, HttpServletRequest request) {
         return response(HttpStatus.CONFLICT, "이미 존재하는 데이터와 충돌했습니다. 입력값을 확인해 주세요.", request);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ResponseEntity<Map<String, Object>> handleDataIntegrity(DataIntegrityViolationException exception, HttpServletRequest request) {
+        return response(HttpStatus.CONFLICT, "입력한 값이 데이터 제약조건과 충돌했습니다. 중복 여부와 입력 길이를 확인해 주세요.", request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

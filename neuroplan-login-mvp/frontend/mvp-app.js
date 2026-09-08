@@ -13,6 +13,12 @@
     { id: 5, code: "CLOUD", name: "Cloud" },
     { id: 6, code: "DEVOPS", name: "DevOps" }
   ];
+  const certificationSubjectCatalog = [
+    { code: "LINUX_MASTER_2_FIRST", name: "리눅스마스터 2급 · 1차" },
+    { code: "LINUX_MASTER_2_SECOND", name: "리눅스마스터 2급 · 2차" },
+    { code: "INFORMATION_PROCESSING_WRITTEN", name: "정보처리기사 · 필기" },
+    { code: "INFORMATION_PROCESSING_PRACTICAL", name: "정보처리기사 · 실기" }
+  ];
   const subjectDescriptions = {
     LINUX: "서버 운영 기초",
     NETWORK: "통신과 보안",
@@ -1255,11 +1261,16 @@
       return;
     }
     const choiceMarkup = subject => `
-      <button class="choice${draftSubjects.includes(subject.code) ? " selected" : ""}" type="button" data-subject="${escapeHtml(subject.code)}">
-        <strong>${escapeHtml(subject.name)}</strong><span>${escapeHtml(subjectDescriptions[subject.code] || "맞춤 학습")}</span>
+      <button class="choice${draftSubjects.includes(subject.code) ? " selected" : ""}${subject.unavailable ? " unavailable" : ""}" type="button" data-subject="${escapeHtml(subject.code)}"${subject.unavailable ? " disabled aria-disabled=\"true\"" : ""}>
+        <strong>${escapeHtml(subject.name)}</strong><span>${escapeHtml(subject.unavailable ? "문제 준비 중" : (subjectDescriptions[subject.code] || "맞춤 학습"))}</span>
       </button>`;
     const generalSubjects = subjectCatalog.filter(subject => !isCertificationSubject(subject.code));
-    const certificationSubjects = subjectCatalog.filter(subject => isCertificationSubject(subject.code));
+    const activeCertificationSubjects = new Map(subjectCatalog
+      .filter(subject => isCertificationSubject(subject.code))
+      .map(subject => [subject.code, subject]));
+    const certificationSubjects = certificationSubjectCatalog.map(subject => activeCertificationSubjects.get(subject.code) || {
+      ...subject, unavailable: true
+    });
     const certificationOrder = ["리눅스마스터 2급", "정보처리기사"];
     const groups = new Map();
     certificationSubjects.forEach(subject => {

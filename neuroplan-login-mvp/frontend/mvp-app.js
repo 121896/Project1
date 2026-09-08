@@ -158,6 +158,7 @@
   let reauthExpiresAt = 0;
   let pendingSecureAction = null;
   let pendingAiAction = null;
+  let pendingAiPromptAction = null;
   let aiLoadingHideTimer = null;
   let aiLoadingProgressTimers = [];
   let aiLoadingStartedAt = 0;
@@ -372,6 +373,12 @@
         $("#aiConsentMessage").textContent = "";
         pendingAiAction = null;
       }
+      if (id === "aiPromptModal") {
+        $("#aiPromptForm").reset();
+        $("#aiPromptMessage").textContent = "";
+        $("#aiPromptCount").textContent = "0 / 300";
+        pendingAiPromptAction = null;
+      }
       if (id === "questionReportModal") {
         $("#questionReportForm").reset();
         $("#questionReportMessage").textContent = "";
@@ -453,6 +460,7 @@
     reauthExpiresAt = 0;
     pendingSecureAction = null;
     pendingAiAction = null;
+    pendingAiPromptAction = null;
     adminOverview = null;
     localStorage.removeItem(storageKey);
     localStorage.removeItem(sessionHintKey);
@@ -1038,6 +1046,40 @@
     return undefined;
   }
 
+  function openAiPromptModal(kind, action) {
+    const labels = {
+      plan: {
+        title: "AI 학습 플랜 생성",
+        description: "원하는 학습 목표나 진행 방식을 선택적으로 입력해 주세요.",
+        placeholder: "예: 네트워크 장애 대응 실습을 중심으로 구성해 주세요."
+      },
+      quiz: {
+        title: "AI 문제 생성",
+        description: "원하는 문제 유형이나 주제를 선택적으로 입력해 주세요.",
+        placeholder: "예: 실무 상황 중심으로, SQL JOIN 문제를 포함해 주세요."
+      },
+      recommendation: {
+        title: "AI 다음 학습 추천 생성",
+        description: "다음 학습에서 집중하고 싶은 내용을 선택적으로 입력해 주세요.",
+        placeholder: "예: 오답이 많았던 권한·소유권을 다시 연습하고 싶어요."
+      }
+    };
+    const config = labels[kind] || labels.quiz;
+    pendingAiPromptAction = action;
+    $("#aiPromptTitle").textContent = config.title;
+    $("#aiPromptDescription").textContent = config.description;
+    $("#aiPromptInput").placeholder = config.placeholder;
+    $("#aiPromptInput").value = "";
+    $("#aiPromptMessage").textContent = "";
+    $("#aiPromptCount").textContent = "0 / 300";
+    openModal("aiPromptModal");
+  }
+
+  async function requestAiPrompt(kind, action) {
+    if (!hasCompleteProfile()) return;
+    await ensureAiEnabled(() => openAiPromptModal(kind, action));
+  }
+
   function updateAiQuota(quota) {
     if (quota) state.ai = { ...state.ai, quota };
   }
@@ -1508,7 +1550,7 @@
     openModal("profileModal");
   }
 
-  async function generatePlan() {
+  async function generatePlan(additionalPrompt = "") {
     if (!hasCompleteProfile()) return;
     await ensureAiEnabled(async () => {
       const button = $("#generatePlan");
@@ -1519,7 +1561,10 @@
       await showAiLoading(`AI가 ${subjectName(code)} 학습 플랜을 만들고 있어요`);
       try {
         if (apiConfig.enabled) {
-          const generated = await apiRequest(`/ai/plans?subjectCode=${encodeURIComponent(code)}`, { method: "POST" });
+          const generated = await apiRequest(`/ai/plans?subjectCode=${encodeURIComponent(code)}`, {
+            method: "POST",
+            body: JSON.stringify({ additionalPrompt })
+          });
           const plan = generated.plan;
           state.plans = [...state.plans.filter(item => item.subjectCode !== plan.subjectCode), plan];
           state.ai.planRationale = { ...state.ai.planRationale, [plan.subjectCode]: generated.rationale };
@@ -1528,7 +1573,7 @@
           usedFallback = Boolean(generated.fallback);
           if (generated.fallback) {
             toast("AI 응답을 검증하지 못해 기본 플랜을 생성했습니다.", {
-              actionLabel: "다시 시도", onAction: generatePlan
+              actionLabel: "다시 시도", onAction: () => generatePlan(additionalPrompt)
             });
           }
         } else {
@@ -1546,7 +1591,7 @@
         addNotification("AI 플랜 생성 완료", `${subjectName(code)} 오늘의 학습 플랜이 준비되었습니다.`, "plan");
         $("#todayPlanTitle").scrollIntoView({ behavior: "smooth", block: "center" });
       } catch (error) {
-        await handleAiRequestError(error, { retry: generatePlan, page: "plan" });
+        await handleAiRequestError(error, { retry: () => generatePlan(additionalPrompt), page: "plan" });
       } finally {
         setAiLoading(false);
         button.disabled = !hasCompleteProfile();
@@ -1555,7 +1600,7 @@
     });
   }
 
-  async function generateRecommendation() {
+  async function generateRecommendation(additionalPrompt = "") {
     if (!hasCompleteProfile()) return;
     await ensureAiEnabled(async () => {
       const button = $("#generateRecommendation");
@@ -1565,7 +1610,10 @@
       await showAiLoading(`AI가 ${subjectName(code)} 학습 기록을 분석하고 있어요`);
       try {
         const generated = apiConfig.enabled
-          ? await apiRequest(`/ai/recommendations?subjectCode=${encodeURIComponent(code)}`, { method: "POST" })
+          ? await apiRequest(`/ai/recommendations?subjectCode=${encodeURIComponent(code)}`, {
+              method: "POST",
+              body: JSON.stringify({ additionalPrompt })
+            })
           : { id: 1, subjectCode: code, subjectName: subjectName(code), title: `${subjectName(code)} 핵심 개념 복습`, content: "최근 학습 기록을 기준으로 핵심 개념을 다시 확인하세요.", priority: 3 };
         const recommendation = {
           ...generated,
@@ -1576,10 +1624,10 @@
         updateAiQuota(generated.quota);
         updateUI();
         toast(generated.fallback ? "AI 응답을 검증하지 못해 기본 재학습 추천을 준비했습니다." : "AI 재학습 추천을 생성했습니다.",
-          generated.fallback ? { actionLabel: "다시 시도", onAction: generateRecommendation } : {});
+          generated.fallback ? { actionLabel: "다시 시도", onAction: () => generateRecommendation(additionalPrompt) } : {});
         addNotification("AI 추천 도착", `${subjectName(code)} 다음 학습 추천이 도착했습니다.`, "plan");
       } catch (error) {
-        await handleAiRequestError(error, { retry: generateRecommendation, page: "plan" });
+        await handleAiRequestError(error, { retry: () => generateRecommendation(additionalPrompt), page: "plan" });
       } finally {
         setAiLoading(false);
         button.disabled = !hasCompleteProfile();
@@ -1588,7 +1636,7 @@
     });
   }
 
-  async function startQuiz(mode = "BANK") {
+  async function startQuiz(mode = "BANK", additionalPrompt = "") {
     const code = mode === "WRONG" && $("#wrongSubjectFilter").value
       ? $("#wrongSubjectFilter").value
       : state.quizSubjectCode || state.subjects[0];
@@ -1602,7 +1650,10 @@
       if (useAi) await showAiLoading(`AI가 ${subjectName(code)} 확인 문제 5개를 만들고 있어요`);
       try {
         if (useAi && apiConfig.enabled) {
-          const generated = await apiRequest(`/ai/questions?subjectCode=${encodeURIComponent(code)}`, { method: "POST" });
+          const generated = await apiRequest(`/ai/questions?subjectCode=${encodeURIComponent(code)}`, {
+            method: "POST",
+            body: JSON.stringify({ additionalPrompt })
+          });
           questions = generated.questions.map(question => ({
             ...question,
             // AI 문제도 서버에서 문제은행 형식으로 저장한 실제 ID를 사용한다.
@@ -1625,7 +1676,7 @@
           updateAiQuota(generated.quota);
           if (generated.fallback) {
             toast("AI 응답을 검증하지 못해 기본 문제를 준비했습니다.", {
-              actionLabel: "다시 시도", onAction: () => startQuiz("AI")
+              actionLabel: "다시 시도", onAction: () => startQuiz("AI", additionalPrompt)
             });
           }
           addNotification("AI 문제 생성 완료", `${subjectName(code)} 문제 5개가 준비되었습니다.`, "quiz");
@@ -1650,7 +1701,7 @@
         renderQuestion();
         $("#quizWorkspace").scrollIntoView({ behavior: "smooth", block: "start" });
       } catch (error) {
-        if (useAi) await handleAiRequestError(error, { retry: () => startQuiz("AI"), page: "quiz" });
+        if (useAi) await handleAiRequestError(error, { retry: () => startQuiz("AI", additionalPrompt), page: "quiz" });
         else toast(error.message);
       } finally {
         if (useAi) setAiLoading(false);
@@ -1898,8 +1949,8 @@
     }
   });
 
-  $("#generatePlan").addEventListener("click", generatePlan);
-  $("#generateRecommendation").addEventListener("click", generateRecommendation);
+  $("#generatePlan").addEventListener("click", () => requestAiPrompt("plan", generatePlan));
+  $("#generateRecommendation").addEventListener("click", () => requestAiPrompt("recommendation", generateRecommendation));
   $("#editAiSettings").addEventListener("click", () => openAiSettings());
   $("#aiConsentForm").addEventListener("submit", async event => {
     event.preventDefault();
@@ -1945,8 +1996,23 @@
       submit.disabled = false;
     }
   });
+  $("#aiPromptForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    const value = $("#aiPromptInput").value.trim();
+    if (value.length > 300) {
+      $("#aiPromptMessage").textContent = "추가 요청은 300자 이내로 입력해 주세요.";
+      return;
+    }
+    const action = pendingAiPromptAction;
+    pendingAiPromptAction = null;
+    closeModal("aiPromptModal");
+    if (action) await action(value);
+  });
+  $("#aiPromptInput").addEventListener("input", event => {
+    $("#aiPromptCount").textContent = `${event.target.value.length} / 300`;
+  });
   $("#quizButton").addEventListener("click", () => startQuiz("BANK"));
-  $("#aiQuizButton").addEventListener("click", () => startQuiz("AI"));
+  $("#aiQuizButton").addEventListener("click", () => requestAiPrompt("quiz", prompt => startQuiz("AI", prompt)));
   $("#editProfile").addEventListener("click", openProfile);
   $("#profileAction").addEventListener("click", openProfile);
   $("#loginButton").addEventListener("click", () => { setAuthMode("login"); openModal("authModal"); });
@@ -2378,7 +2444,7 @@
     const step = currentStep();
     if (step === 1) { setAuthMode("signup"); openModal("authModal"); }
     else if (step === 2) openProfile();
-    else if (step === 3) generatePlan();
+    else if (step === 3) requestAiPrompt("plan", generatePlan);
     else if (step === 4) showPage("plan");
     else if (step === 5) showPage("quiz");
     else toast("오늘 학습을 모두 완료했어요. 수고하셨습니다!");

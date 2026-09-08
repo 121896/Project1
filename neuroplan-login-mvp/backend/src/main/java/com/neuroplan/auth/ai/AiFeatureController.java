@@ -102,11 +102,14 @@ public class AiFeatureController {
     }
 
     @PostMapping("/plans")
-    public AiPlanResponse generatePlan(@RequestParam String subjectCode, HttpServletRequest request) {
+    public AiPlanResponse generatePlan(@RequestParam String subjectCode,
+                                       @RequestBody(required = false) AiPromptRequest body,
+                                       HttpServletRequest request) {
         UserRecord user = currentUserService.require(request);
         ProfileSubject focus = profileSubject(user.id(), subjectCode);
         PlanGeneration generated = generationService.generatePlan(
-                user.id(), focus.subjectId(), focus.subjectName(), focus.levelLabel());
+                user.id(), focus.subjectId(), focus.subjectName(), focus.levelLabel(),
+                normalizeAdditionalPrompt(body == null ? null : body.additionalPrompt()));
         long planId = persistAiResult(user.id(), generated.generationRunId(), "AI 플랜 저장 실패 환불",
                 () -> savePlan(user.id(), focus, generated));
         return new AiPlanResponse(plan(planId, user.id()), generated.generationRunId(),
@@ -116,12 +119,14 @@ public class AiFeatureController {
     @PostMapping("/questions")
     public AiQuizResponse generateQuestions(
             @RequestParam String subjectCode,
+            @RequestBody(required = false) AiPromptRequest body,
             HttpServletRequest request
     ) {
         UserRecord user = currentUserService.require(request);
         ProfileSubject focus = profileSubject(user.id(), subjectCode);
         QuizGeneration generated = generationService.generateQuiz(
-                user.id(), focus.subjectId(), focus.subjectName(), focus.levelLabel());
+                user.id(), focus.subjectId(), focus.subjectName(), focus.levelLabel(),
+                normalizeAdditionalPrompt(body == null ? null : body.additionalPrompt()));
         // AI 문제에도 실제 문제/보기 ID를 부여한다. 따라서 풀이 결과를 기존
         // diagnosis_attempts와 wrong_notes 흐름으로 그대로 기록할 수 있다.
         List<AiQuizQuestionResponse> questions = persistAiResult(
@@ -218,6 +223,7 @@ public class AiFeatureController {
     @PostMapping("/recommendations")
     public AiRecommendationResponse generateRecommendation(
             @RequestParam String subjectCode,
+            @RequestBody(required = false) AiPromptRequest body,
             HttpServletRequest request
     ) {
         UserRecord user = currentUserService.require(request);
@@ -225,7 +231,8 @@ public class AiFeatureController {
         String summary = learningSummary(user.id(), focus.subjectId());
         RecommendationGeneration generated = generationService.generateRecommendation(
                 user.id(), new RecommendationContext(
-                        focus.subjectId(), focus.subjectName(), focus.levelLabel(), summary));
+                        focus.subjectId(), focus.subjectName(), focus.levelLabel(), summary),
+                normalizeAdditionalPrompt(body == null ? null : body.additionalPrompt()));
         long queueId = persistAiResult(user.id(), generated.generationRunId(), "AI 재학습 추천 저장 실패 환불",
                 () -> insertRecommendation(user.id(), focus.subjectId(), generated));
         return new AiRecommendationResponse(queueId, generated.generationRunId(), generated.fallback(),
@@ -597,6 +604,14 @@ public class AiFeatureController {
         };
     }
 
+    private String normalizeAdditionalPrompt(String value) {
+        String normalized = value == null ? "" : value.trim();
+        if (normalized.length() > 300) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "추가 요청은 300자 이내로 입력해 주세요.");
+        }
+        return normalized;
+    }
+
     private record ProfileSubject(long subjectId, String subjectCode, String subjectName, String levelLabel) {}
     private record PlanHeader(long id, String title, String status, long subjectId, String subjectCode, String subjectName) {}
     public record PlanStepResponse(long id, int stepNo, String title, String content, String status) {}
@@ -616,6 +631,7 @@ public class AiFeatureController {
                                            String content, int priority, AiQuotaResponse quota) {}
     public record AiPreferenceRequest(boolean enabled, boolean consent, String explanationStyle,
                                       int availableMinutes) {}
+    public record AiPromptRequest(String additionalPrompt) {}
     public record AiFeedbackSummary(long id, long questionId, long generationRunId, String feedback,
                                     List<String> recommendedActions, java.time.Instant createdAt) {}
     public record AiRecommendationSummary(long id, long subjectId, String subjectCode, String subjectName,

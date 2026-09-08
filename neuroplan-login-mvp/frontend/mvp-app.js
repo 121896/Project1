@@ -699,8 +699,15 @@
     $("#adminQuestionSubject").innerHTML = adminSubjects.filter(item => item.active).map(item => `<option value="${item.id}">${escapeHtml(item.name)} (${escapeHtml(item.code)})</option>`).join("");
     $("#adminSubjectList").innerHTML = adminSubjects.map(item => `<article class="history-item"><div><strong>${escapeHtml(item.name)}</strong><p>${escapeHtml(item.code)} · ${item.active ? "활성" : "비활성"}</p></div><button class="button secondary small" type="button" data-admin-subject-active="${item.id}" data-next-active="${!item.active}">${item.active ? "비활성화" : "활성화"}</button></article>`).join("");
     $("#adminQuestionList").innerHTML = adminQuestions.map(item => `<article class="history-item"><div><strong>#${item.questionNo} ${escapeHtml(item.questionText)}</strong><p>${escapeHtml(item.difficulty)} · ${item.active ? "출제 중" : "비활성"}</p></div><div class="admin-user-actions"><button class="button secondary small" type="button" data-admin-question-edit="${item.id}">수정</button><button class="button secondary small" type="button" data-admin-question-active="${item.id}" data-next-active="${!item.active}">${item.active ? "비활성화" : "활성화"}</button></div></article>`).join("") || '<span class="metric-caption">등록된 문제가 없습니다.</span>';
+    const difficultyOrder = ["BEGINNER", "INTERMEDIATE", "ADVANCED"];
+    const difficultyLabels = { BEGINNER: "초급", INTERMEDIATE: "중급", ADVANCED: "고급" };
+    const problemBankBySubject = adminProblemBank.reduce((groups, item) => {
+      const subject = item.subjectName || "과목 미지정";
+      (groups[subject] ||= []).push(item);
+      return groups;
+    }, {});
     $("#adminProblemBankList").innerHTML = adminProblemBank.length
-      ? adminProblemBank.map(item => `<article class="history-item"><div><strong>${escapeHtml(item.subjectName)} · ${escapeHtml(item.difficulty)}</strong><p>활성 ${item.activeCount}개 · 비활성 ${item.inactiveCount}개 · 전체 ${item.totalCount}개</p></div><span class="today-tag">${item.lastCreatedAt ? new Date(item.lastCreatedAt).toLocaleDateString("ko-KR") : "생성 이력 없음"}</span></article>`).join("")
+      ? Object.entries(problemBankBySubject).map(([subjectName, items]) => `<section class="problem-bank-subject"><strong class="problem-bank-subject-title">${escapeHtml(subjectName)}</strong><div class="problem-bank-grid">${items.slice().sort((a, b) => difficultyOrder.indexOf(a.difficulty) - difficultyOrder.indexOf(b.difficulty)).map(item => `<article class="problem-bank-cell"><strong>${escapeHtml(difficultyLabels[item.difficulty] || item.difficulty)}</strong><span>활성 ${item.activeCount}개 · 비활성 ${item.inactiveCount}개<br>전체 ${item.totalCount}개 · 최근 ${item.lastCreatedAt ? new Date(item.lastCreatedAt).toLocaleDateString("ko-KR") : "없음"}</span></article>`).join("")}</div></section>`).join("")
       : '<span class="metric-caption">문제은행 현황을 불러오지 못했습니다.</span>';
     const ai = adminAiOperations;
     $("#adminAiOperations").innerHTML = ai

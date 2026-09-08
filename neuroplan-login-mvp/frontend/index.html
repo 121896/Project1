@@ -512,6 +512,15 @@
     .danger-zone { border-color: #edc4bf; background: linear-gradient(180deg, var(--paper), #fff9f7); }
     .danger-zone .card-head p { color: #94635d; }
     .settings-form { display: grid; gap: 11px; }
+    #adminSubjectForm { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 12px; }
+    #adminSubjectForm .field, #adminQuestionForm .field { margin-bottom: 0; }
+    #adminSubjectForm .button { min-width: 120px; }
+    #adminQuestionForm { grid-template-columns: minmax(150px, .8fr) minmax(100px, .45fr) minmax(220px, 1.4fr) minmax(220px, 1.2fr) minmax(180px, 1fr); align-items: end; gap: 12px; }
+    #adminQuestionForm .field:nth-child(4), #adminQuestionForm .field:nth-child(5) { grid-column: span 2; }
+    #adminQuestionForm .admin-user-actions { grid-column: 1 / -1; }
+    #adminSubjectList, #adminQuestionList { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .admin-operations-grid { grid-template-columns: 1fr; }
+    .admin-operations-grid > .content-card { min-width: 0; }
 
     .main-grid { margin-top: 16px; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr); gap: 16px; }
     .content-card { padding: 24px; }
@@ -930,6 +939,16 @@
     .admin-head h1 { margin: 0 0 7px; color: var(--navy); font-size: 30px; letter-spacing: -.045em; }
     .admin-head p { margin: 0; color: var(--muted); font-size: 13px; }
     .admin-metrics { margin-bottom: 22px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .admin-metrics.compact { grid-template-columns: repeat(5, minmax(132px, 1fr)); overflow-x: auto; padding-bottom: 4px; }
+    .admin-metrics.compact .admin-metric { min-width: 132px; padding: 16px; }
+    .admin-metrics.compact .admin-metric strong { font-size: 22px; overflow-wrap: anywhere; }
+    .problem-bank-subject { margin-top: 14px; }
+    .problem-bank-subject:first-child { margin-top: 0; }
+    .problem-bank-subject-title { display: block; margin-bottom: 8px; color: var(--navy); font-size: 13px; }
+    .problem-bank-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .problem-bank-cell { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: #fbfefc; }
+    .problem-bank-cell strong { display: block; color: var(--ink); font-size: 11px; overflow-wrap: anywhere; }
+    .problem-bank-cell span { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; line-height: 1.45; }
     .admin-metric { padding: 20px; border: 1px solid var(--line); border-radius: 19px; background: var(--paper); box-shadow: 0 10px 28px rgba(59,100,79,.08); }
     .admin-metric span { color: var(--muted); font-size: 11px; font-weight: 800; }
     .admin-metric strong { margin-top: 8px; display: block; color: var(--navy); font-size: 27px; }
@@ -973,6 +992,14 @@
     body.dark-mode .account-fact, body.dark-mode .weekly-summary-item { background: #1b3025; }
     body.dark-mode .danger-zone { background: linear-gradient(180deg, var(--paper), #2d1e1d); }
     body.dark-mode .admin-table th { background: #1b3025; }
+    body.dark-mode .problem-bank-cell { background: #1a2c23; }
+    @media (max-width: 900px) {
+      #adminSubjectForm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      #adminSubjectForm .button { grid-column: 1 / -1; }
+      #adminQuestionForm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      #adminQuestionForm .field:nth-child(3), #adminQuestionForm .field:nth-child(4), #adminQuestionForm .field:nth-child(5) { grid-column: span 2; }
+      #adminSubjectList, #adminQuestionList { grid-template-columns: 1fr; }
+    }
     body.dark-mode .modal-backdrop { background: rgba(0,0,0,.62); }
     body.dark-mode .theme-switch { background: #4b5d51; }
     body.dark-mode .quiz-callout { border-color: #426b52; background: linear-gradient(115deg, #1c3327, #253b2e); }
@@ -1379,7 +1406,7 @@
       <div class="card-head"><div><h2 id="adminSubjectStatsTitle">과목별 학습 통계</h2><p>선택 회원·풀이 수·누적 정답률을 확인합니다.</p></div></div>
       <div class="subject-stat-list" id="adminSubjectStats"><span class="metric-caption">통계를 불러오는 중입니다.</span></div>
     </section>
-    <section class="settings-grid page-title-card" aria-label="AI와 문제은행 운영 현황">
+    <section class="settings-grid page-title-card admin-operations-grid" aria-label="AI와 문제은행 운영 현황">
       <article class="content-card">
         <div class="card-head"><div><h2>문제은행 현황</h2><p>과목·난이도별 활성 문제와 최근 생성 시각을 확인합니다.</p></div></div>
         <div class="history-list" id="adminProblemBankList"><span class="metric-caption">문제은행 현황을 불러오는 중입니다.</span></div>
@@ -1388,25 +1415,6 @@
         <div class="card-head"><div><h2>AI 운영 현황</h2><p>최근 7일 Gemini 요청·토큰·실패 유형을 확인합니다.</p></div></div>
         <div id="adminAiOperations"><span class="metric-caption">AI 운영 현황을 불러오는 중입니다.</span></div>
       </article>
-    </section>
-    <section aria-labelledby="adminUsersTitle">
-      <div class="card-head"><div><h2 id="adminUsersTitle">회원 검색·관리</h2><p>계정 상태를 변경하면 잠금·탈퇴 회원의 로그인 세션이 즉시 폐기됩니다.</p></div><button class="button secondary small" id="adminRefresh" type="button"><span class="button-icon" aria-hidden="true">↻</span><span>새로고침</span></button></div>
-      <form class="filter-row" id="adminUserSearchForm">
-        <input id="adminUserQuery" type="search" placeholder="이메일 또는 닉네임 검색">
-        <select id="adminUserStatus"><option value="">전체 상태</option><option value="ACTIVE">ACTIVE</option><option value="LOCKED">LOCKED</option><option value="WITHDRAWN">WITHDRAWN</option></select>
-        <button class="button secondary small" type="submit">검색</button>
-      </form>
-      <div class="admin-table-wrap">
-        <table class="admin-table">
-          <thead><tr><th>회원</th><th>상태</th><th>선택 과목</th><th>가입 시각</th><th>최근 세션</th><th>관리</th></tr></thead>
-          <tbody id="adminUsersBody"><tr><td colspan="6">관리자 데이터를 불러오는 중입니다.</td></tr></tbody>
-        </table>
-      </div>
-      <div class="admin-pagination" aria-label="회원 목록 페이지 이동">
-        <button class="button secondary small" id="adminPrevPage" type="button">이전</button>
-        <span id="adminPageLabel">1 / 1</span>
-        <button class="button secondary small" id="adminNextPage" type="button">다음</button>
-      </div>
     </section>
     <section class="settings-grid page-title-card" aria-label="학습 콘텐츠 관리">
       <article class="content-card">
@@ -1437,6 +1445,25 @@
     <section class="content-card" style="margin-top:22px" aria-labelledby="adminQuestionReportsTitle">
       <div class="card-head"><div><h2 id="adminQuestionReportsTitle">문제 신고 관리</h2><p>오류·애매함·중복 신고를 확인하고 처리 상태를 기록합니다.</p></div></div>
       <div class="history-list" id="adminQuestionReports"><span class="metric-caption">신고를 불러오는 중입니다.</span></div>
+    </section>
+    <section class="content-card" style="margin-top:22px" aria-labelledby="adminUsersTitle">
+      <div class="card-head"><div><h2 id="adminUsersTitle">회원 검색·관리</h2><p>계정 상태를 변경하면 잠금·탈퇴 회원의 로그인 세션이 즉시 폐기됩니다.</p></div><button class="button secondary small" id="adminRefresh" type="button"><span class="button-icon" aria-hidden="true">↻</span><span>새로고침</span></button></div>
+      <form class="filter-row" id="adminUserSearchForm">
+        <input id="adminUserQuery" type="search" placeholder="이메일 또는 닉네임 검색">
+        <select id="adminUserStatus"><option value="">전체 상태</option><option value="ACTIVE">ACTIVE</option><option value="LOCKED">LOCKED</option><option value="WITHDRAWN">WITHDRAWN</option></select>
+        <button class="button secondary small" type="submit">검색</button>
+      </form>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>회원</th><th>상태</th><th>선택 과목</th><th>가입 시각</th><th>최근 세션</th><th>관리</th></tr></thead>
+          <tbody id="adminUsersBody"><tr><td colspan="6">관리자 데이터를 불러오는 중입니다.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="admin-pagination" aria-label="회원 목록 페이지 이동">
+        <button class="button secondary small" id="adminPrevPage" type="button">이전</button>
+        <span id="adminPageLabel">1 / 1</span>
+        <button class="button secondary small" id="adminNextPage" type="button">다음</button>
+      </div>
     </section>
   </main>
 

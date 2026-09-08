@@ -719,7 +719,9 @@
           </tr>`).join("")
       : '<tr><td colspan="6">표시할 회원이 없습니다.</td></tr>';
     const totalPages = Math.max(1, Math.ceil((adminUserPage.totalElements || 0) / adminPageSize));
-    $("#adminPageLabel").textContent = `${adminPageIndex + 1} / ${totalPages}`;
+    $("#adminPageInput").value = String(adminPageIndex + 1);
+    $("#adminPageInput").max = String(totalPages);
+    $("#adminPageTotal").textContent = String(totalPages);
     $("#adminPrevPage").disabled = adminPageIndex <= 0;
     $("#adminNextPage").disabled = adminPageIndex + 1 >= totalPages;
     $("#adminSubjectStats").innerHTML = adminSubjectStats.length
@@ -2034,6 +2036,21 @@
     const totalPages = Math.max(1, Math.ceil((adminUserPage.totalElements || 0) / adminPageSize));
     if (adminPageIndex + 1 >= totalPages) return;
     adminPageIndex += 1;
+    try { await loadAdminOverview(); } catch (error) { toast(error.message); }
+  });
+  $("#adminPageInput").addEventListener("change", async event => {
+    const totalPages = Math.max(1, Math.ceil((adminUserPage.totalElements || 0) / adminPageSize));
+    const requestedPage = Number.parseInt(event.target.value, 10);
+    if (!Number.isFinite(requestedPage)) {
+      renderAdminOverview();
+      return;
+    }
+    const nextPageIndex = Math.max(0, Math.min(totalPages - 1, requestedPage - 1));
+    if (nextPageIndex === adminPageIndex) {
+      renderAdminOverview();
+      return;
+    }
+    adminPageIndex = nextPageIndex;
     try { await loadAdminOverview(); } catch (error) { toast(error.message); }
   });
   $("#adminSubjectForm").addEventListener("submit", async event => {

@@ -1219,8 +1219,12 @@
 
   function renderPlanHistory() {
     $("#planHistoryList").innerHTML = state.planHistory.length
-      ? state.planHistory.map(item => `
-          <article class="history-item"><div><strong>${escapeHtml(item.subjectName)} · ${escapeHtml(item.title)}</strong><p>${escapeHtml(item.planDate)} · ${escapeHtml(item.status)}</p>${planHistoryDetails.get(item.id) ? `<ol class="plan-step-actions">${planHistoryDetails.get(item.id).steps.map(step => `<li><strong>${escapeHtml(step.title)}</strong> — ${escapeHtml(step.content)}</li>`).join("")}</ol>` : ""}</div><div class="admin-user-actions"><span class="today-tag">${item.completedSteps}/${item.totalSteps}단계</span><button class="button secondary small" type="button" data-plan-detail="${item.id}">상세 비교</button><button class="button secondary small" type="button" data-plan-select="${item.id}">이 플랜 사용</button></div></article>`).join("")
+      ? state.planHistory.map(item => {
+          const expanded = planHistoryDetails.has(item.id);
+          const detail = planHistoryDetails.get(item.id);
+          return `
+          <article class="history-item"><div><strong>${escapeHtml(item.subjectName)} · ${escapeHtml(item.title)}</strong><p>${escapeHtml(item.planDate)} · ${escapeHtml(item.status)}</p>${expanded ? `<div class="plan-history-detail" data-plan-detail-panel><ol class="plan-step-actions">${detail.steps.map(step => `<li><strong>${escapeHtml(step.title)}</strong> — ${escapeHtml(step.content)}</li>`).join("")}</ol></div>` : ""}</div><div class="admin-user-actions"><span class="today-tag">${item.completedSteps}/${item.totalSteps}단계</span><button class="button secondary small" type="button" data-plan-detail="${item.id}">${expanded ? "접기" : "상세 정보"}</button><button class="button secondary small" type="button" data-plan-select="${item.id}">이 플랜 사용</button></div></article>`;
+        }).join("")
       : '<div class="empty-state"><div><strong>아직 학습 기록이 없습니다.</strong><span>플랜을 생성하면 날짜별 기록이 표시됩니다.</span></div></div>';
   }
 
@@ -2084,6 +2088,21 @@
     const planId = Number((detail || select).dataset.planDetail || (detail || select).dataset.planSelect);
     try {
       if (detail) {
+        if (planHistoryDetails.has(planId)) {
+          const panel = detail.closest(".history-item")?.querySelector("[data-plan-detail-panel]");
+          if (panel) {
+            detail.disabled = true;
+            panel.classList.add("is-collapsing");
+            window.setTimeout(() => {
+              planHistoryDetails.delete(planId);
+              renderPlanHistory();
+            }, 260);
+          } else {
+            planHistoryDetails.delete(planId);
+            renderPlanHistory();
+          }
+          return;
+        }
         const plan = apiConfig.enabled ? await apiRequest(`/learning/plans/${planId}`) : null;
         if (plan) planHistoryDetails.set(planId, plan);
         renderPlanHistory();

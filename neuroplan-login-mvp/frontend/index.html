@@ -717,6 +717,7 @@
     .ai-recommendation-result .plan-step-actions { margin-top: 10px; }
     .ai-recommendation-meta { margin-top: 9px; color: var(--muted); font-size: 10px; }
     .ai-consent-note { margin: 0 0 16px; padding: 14px; border-radius: 14px; color: #315044; background: var(--sky-soft); font-size: 12px; line-height: 1.65; }
+    .ai-prompt-count { margin-top: 5px; color: var(--muted); font-size: 10px; text-align: right; }
     .check-field { display: flex; align-items: flex-start; gap: 9px; margin: 4px 0 17px; color: #315044; font-size: 12px; line-height: 1.5; }
     .check-field input { margin-top: 2px; }
     .subject-progress-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; font-size: 12px; }
@@ -1647,6 +1648,27 @@
           <label class="check-field"><input id="aiConsentCheck" type="checkbox"><span>외부 AI 처리 안내를 확인했으며 AI 학습 기능 사용에 동의합니다.</span></label>
           <div class="form-message" id="aiConsentMessage" role="alert"></div>
           <button class="button primary block" id="aiConsentSubmit" type="submit">동의하고 AI 기능 사용</button>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="aiPromptModal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="aiPromptTitle">
+      <div class="modal-head">
+        <div><h2 id="aiPromptTitle">AI 학습 요청 추가</h2><p id="aiPromptDescription">원하는 학습 방향을 선택적으로 입력해 주세요.</p></div>
+        <button class="close-button" type="button" data-close="aiPromptModal" aria-label="닫기">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="ai-consent-note" id="aiPromptNote">비워두면 기본 설정으로 AI가 생성합니다. 최대 300자까지 입력할 수 있습니다.</p>
+        <form id="aiPromptForm">
+          <div class="field">
+            <label for="aiPromptInput">추가 요청 (선택)</label>
+            <textarea id="aiPromptInput" maxlength="300" rows="5" placeholder="예: 실무 상황 중심으로 구성해 주세요."></textarea>
+            <div class="ai-prompt-count" id="aiPromptCount">0 / 300</div>
+          </div>
+          <div class="form-message" id="aiPromptMessage" role="alert"></div>
+          <button class="button primary block" id="aiPromptSubmit" type="submit">AI 생성 시작</button>
         </form>
       </div>
     </section>

@@ -746,8 +746,15 @@
     $("#adminQuestionText").focus();
   }
 
-  async function openAdminPage() {
+  async function openAdminPage({ verified = false } = {}) {
     if (!state.isAdmin) return;
+    if (!verified) {
+      pendingSecureAction = () => openAdminPage({ verified: true });
+      $("#reauthForm").reset();
+      $("#reauthMessage").textContent = "관리자 페이지 접속을 위해 관리자 계정 비밀번호를 입력해 주세요.";
+      openModal("reauthModal");
+      return;
+    }
     closeUserMenu();
     $("#userMenuButton").disabled = true;
     try {

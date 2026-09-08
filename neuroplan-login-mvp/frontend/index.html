@@ -782,6 +782,11 @@
     }
     .modal-body { padding: 24px 25px 26px; }
     .quiz-workspace { margin-top: 18px; padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: var(--paper); box-shadow: 0 14px 34px rgba(47,86,72,.08); }
+    .quiz-workspace.subject-switching { animation: quiz-subject-switch .42s cubic-bezier(.22,.72,.28,1) both; }
+    @keyframes quiz-subject-switch {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
     .quiz-workspace-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
     .quiz-workspace-head h3 { margin: 0; font-size: 20px; letter-spacing: -.04em; }
     .quiz-workspace-head p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }

@@ -520,10 +520,11 @@
     #adminQuestionForm .admin-user-actions { grid-column: 1 / -1; }
     #adminSubjectList { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #adminQuestionList { grid-template-columns: 1fr; }
-    #adminQuestionList .history-item { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    #adminQuestionList .history-item { min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 16px 17px; }
     #adminQuestionList .history-item > div:first-child { min-width: 0; }
-    #adminQuestionList .history-item strong, #adminQuestionList .history-item p { overflow-wrap: anywhere; }
-    #adminQuestionList .admin-user-actions { flex: 0 0 auto; flex-direction: row; align-items: center; }
+    #adminQuestionList .history-item strong { display: block; font-size: clamp(12px, 1.15vw, 15px); line-height: 1.45; overflow-wrap: anywhere; }
+    #adminQuestionList .history-item p { overflow-wrap: anywhere; }
+    #adminQuestionList .admin-user-actions { flex: 0 0 auto; flex-direction: row; align-items: center; justify-content: flex-end; }
     #adminQuestionList .admin-user-actions .button { white-space: nowrap; }
     .admin-operations-grid { grid-template-columns: 1fr; }
     .admin-operations-grid > .content-card { min-width: 0; }

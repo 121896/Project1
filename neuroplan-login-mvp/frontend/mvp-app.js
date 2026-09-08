@@ -137,6 +137,7 @@
   let quizIndex = 0;
   let quizScore = 0;
   let chosenAnswer = null;
+  let shortAnswerText = "";
   let answerChecked = false;
   let quizMode = "BANK";
   let aiQuizRunId = null;
@@ -1085,6 +1086,11 @@
         description: "원하는 문제 유형이나 주제를 선택적으로 입력해 주세요.",
         placeholder: "예: 실무 상황 중심으로, SQL JOIN 문제를 포함해 주세요."
       },
+      shortAnswer: {
+        title: "AI 주관식 문제 생성",
+        description: "정보처리기사 실기에서 확인하고 싶은 영역을 선택적으로 입력해 주세요.",
+        placeholder: "예: SQL 정규화와 JOIN 중심의 단답형 문제를 만들어 주세요."
+      },
       recommendation: {
         title: "AI 다음 학습 추천 생성",
         description: "다음 학습에서 집중하고 싶은 내용을 선택적으로 입력해 주세요.",
@@ -1577,6 +1583,9 @@
     });
     $("#quizButton").disabled = !hasProfile || !state.quizSubjectCode;
     $("#aiQuizButton").disabled = !hasProfile || !state.quizSubjectCode;
+    const practicalSubjectSelected = state.quizSubjectCode === "INFORMATION_PROCESSING_PRACTICAL";
+    $("#aiShortAnswerAction").hidden = !practicalSubjectSelected;
+    $("#aiShortAnswerQuizButton").disabled = !hasProfile || !practicalSubjectSelected;
     $("#quizGuide").textContent = state.quizFinished
       ? "최근 문제은행 결과가 대시보드에 반영되었습니다. 기존 문제 또는 AI 새 문제를 다시 풀 수 있어요."
       : "플랜 체크 여부와 관계없이 기존 문제은행 5문제 또는 AI가 새로 만든 5문제를 풀 수 있습니다.";
@@ -1720,24 +1729,26 @@
       ? $("#wrongSubjectFilter").value
       : state.quizSubjectCode || state.subjects[0];
     if (!code) return;
-    const useAi = mode === "AI";
+    const useAi = mode === "AI" || mode === "AI_SHORT";
+    const useShortAnswer = mode === "AI_SHORT";
     const useWrongNotes = mode === "WRONG";
     const run = async () => {
-      const button = useAi ? $("#aiQuizButton") : useWrongNotes ? $("#wrongRetryButton") : $("#quizButton");
+      const button = useShortAnswer ? $("#aiShortAnswerQuizButton")
+        : useAi ? $("#aiQuizButton") : useWrongNotes ? $("#wrongRetryButton") : $("#quizButton");
       button.disabled = true;
       if (useAi) button.setAttribute("aria-busy", "true");
-      if (useAi) await showAiLoading(`AI가 ${subjectName(code)} 확인 문제 5개를 만들고 있어요`);
+      if (useAi) await showAiLoading(`AI가 ${subjectName(code)} ${useShortAnswer ? "주관식" : "확인"} 문제 5개를 만들고 있어요`);
       try {
         if (useAi && apiConfig.enabled) {
           const generated = await apiRequest(`/ai/questions?subjectCode=${encodeURIComponent(code)}`, {
             method: "POST",
-            body: JSON.stringify({ additionalPrompt })
+            body: JSON.stringify({ additionalPrompt, questionType: useShortAnswer ? "SHORT_ANSWER" : "MULTIPLE_CHOICE" })
           });
           questions = generated.questions.map(question => ({
             ...question,
             // AI 문제도 서버에서 문제은행 형식으로 저장한 실제 ID를 사용한다.
             id: question.id,
-            options: question.options.map(option => ({
+            options: (question.options || []).map(option => ({
               id: option.id,
               optionNo: option.optionNo,
               text: option.text
@@ -1745,7 +1756,7 @@
           }));
           aiQuizRunId = generated.generationRunId;
           quizSetsBySubject.set(code, {
-            mode: "AI",
+            mode,
             runId: aiQuizRunId,
             questions: questions.map(question => ({
               ...question,
@@ -1758,7 +1769,7 @@
               actionLabel: "다시 시도", onAction: () => startQuiz("AI", additionalPrompt)
             });
           }
-          addNotification("AI 문제 생성 완료", `${subjectName(code)} 문제 5개가 준비되었습니다.`, "quiz");
+          addNotification("AI 문제 생성 완료", `${subjectName(code)} ${useShortAnswer ? "주관식" : "객관식"} 문제 5개가 준비되었습니다.`, "quiz");
         } else if (useWrongNotes && apiConfig.enabled) {
           questions = await apiRequest(`/learning/wrong-notes/questions?subjectCode=${encodeURIComponent(code)}`);
           if (!questions.length) throw new Error("이 과목에는 다시 풀 미해결 오답이 없습니다.");
@@ -1769,7 +1780,7 @@
             : fallbackQuestions;
           aiQuizRunId = useAi ? 1 : null;
         }
-        quizMode = useAi ? "AI" : useWrongNotes ? "WRONG" : "BANK";
+        quizMode = useShortAnswer ? "AI_SHORT" : useAi ? "AI" : useWrongNotes ? "WRONG" : "BANK";
         quizAnswers = [];
         quizIndex = 0;
         quizScore = 0;
@@ -1780,7 +1791,7 @@
         renderQuestion();
         $("#quizWorkspace").scrollIntoView({ behavior: "smooth", block: "start" });
       } catch (error) {
-        if (useAi) await handleAiRequestError(error, { retry: () => startQuiz("AI", additionalPrompt), page: "quiz" });
+        if (useAi) await handleAiRequestError(error, { retry: () => startQuiz(mode, additionalPrompt), page: "quiz" });
         else toast(error.message);
       } finally {
         if (useAi) setAiLoading(false);
@@ -1794,18 +1805,23 @@
 
   function renderQuestion() {
     const question = questions[quizIndex];
-    $("#quizTitle").textContent = quizMode === "AI" ? "AI 확인 문제" : quizMode === "WRONG" ? "오답 다시 풀기" : "오늘의 확인 문제";
+    const shortAnswer = question.questionType === "SHORT_ANSWER";
+    $("#quizTitle").textContent = shortAnswer ? "AI 주관식 문제" : quizMode === "AI" ? "AI 확인 문제" : quizMode === "WRONG" ? "오답 다시 풀기" : "오늘의 확인 문제";
     $("#questionCounter").textContent = `${quizIndex + 1} / ${questions.length}`;
     $("#quizProgressBar").style.width = `${((quizIndex + 1) / questions.length) * 100}%`;
     $("#questionSubject").textContent = `${question.subjectName} · ${question.difficulty}`;
     $("#questionText").textContent = question.text;
     $("#reportQuestionButton").dataset.questionId = String(question.id);
-    $("#quizSubjectText").textContent = quizMode === "AI"
+    $("#quizSubjectText").textContent = shortAnswer
+      ? `${subjectName(state.quizSubjectCode || state.subjects[0])} 단답형 답안을 AI가 검토합니다.`
+      : quizMode === "AI"
       ? `${subjectName(state.quizSubjectCode || state.subjects[0])} 맞춤 문제 · 결과는 연습용입니다.`
       : quizMode === "WRONG"
         ? `${subjectName(state.quizSubjectCode || state.subjects[0])} 미해결 오답을 다시 확인합니다.`
       : `${subjectName(state.quizSubjectCode || state.subjects[0])} 핵심 내용을 확인합니다.`;
-    $("#answerList").innerHTML = question.options.map((option, index) => `
+    $("#answerList").innerHTML = shortAnswer ? `
+      <textarea class="short-answer-input" id="shortAnswerInput" maxlength="2000" placeholder="답안을 입력해 주세요. AI가 핵심 내용과 기술적 정확성을 검토합니다."></textarea>`
+      : question.options.map((option, index) => `
       <button class="answer" type="button" data-answer="${option.id}">
         <span class="answer-letter">${String.fromCharCode(65 + index)}</span><span>${escapeHtml(option.text)}</span>
       </button>`).join("");
@@ -1814,7 +1830,13 @@
     $("#nextQuestion").disabled = true;
     $("#nextQuestion").textContent = "답안 제출";
     chosenAnswer = null;
+    shortAnswerText = "";
     answerChecked = false;
+    const input = $("#shortAnswerInput");
+    if (input) input.addEventListener("input", event => {
+      shortAnswerText = event.target.value;
+      $("#nextQuestion").disabled = !shortAnswerText.trim();
+    });
   }
 
   function addNotification(title, message, page = "dashboard", { type = "GENERAL", sourceKey = null } = {}) {
@@ -2110,6 +2132,7 @@
   });
   $("#quizButton").addEventListener("click", () => startQuiz("BANK"));
   $("#aiQuizButton").addEventListener("click", () => requestAiPrompt("quiz", prompt => startQuiz("AI", prompt)));
+  $("#aiShortAnswerQuizButton").addEventListener("click", () => requestAiPrompt("shortAnswer", prompt => startQuiz("AI_SHORT", prompt)));
   $("#editProfile").addEventListener("click", openProfile);
   $("#loginButton").addEventListener("click", () => { setAuthMode("login"); openModal("authModal"); });
   $("#signupButton").addEventListener("click", () => { setAuthMode("signup"); openModal("authModal"); });
@@ -2579,6 +2602,26 @@
     if (!answerChecked) {
       $("#nextQuestion").disabled = true;
       try {
+        if (question.questionType === "SHORT_ANSWER") {
+          const answerText = shortAnswerText.trim();
+          if (!answerText) throw new Error("답안을 입력해 주세요.");
+          if (!apiConfig.enabled) throw new Error("AI 주관식 답안 검토는 서버 연결 후 사용할 수 있습니다.");
+          const checked = await apiRequest(`/ai/questions/${aiQuizRunId}/short-answer/check`, {
+            method: "POST",
+            body: JSON.stringify({ questionId: question.id, answerText })
+          });
+          answerChecked = true;
+          if (checked.correct) quizScore += 1;
+          quizAnswers.push({ questionId: question.id, answerText, evaluated: true });
+          $("#shortAnswerInput").disabled = true;
+          $("#explanation").textContent = checked.correct
+            ? "정답으로 인정됐습니다."
+            : `보완이 필요한 답안입니다. ${checked.feedback}\n점수: ${checked.score}점\n모범 답안: ${checked.modelAnswer}`;
+          $("#explanation").hidden = false;
+          $("#nextQuestion").textContent = quizIndex === questions.length - 1 ? "결과 확인" : "다음 문제";
+          updateAiQuota(checked.quota);
+          return;
+        }
         const selectedOption = question.options.find(option => option.id === chosenAnswer);
         const checked = apiConfig.enabled
           ? await apiRequest(quizMode === "AI" ? `/ai/questions/${aiQuizRunId}/check` : "/learning/diagnosis/check", {
@@ -2624,7 +2667,12 @@
 
     $("#nextQuestion").disabled = true;
     try {
-      if (apiConfig.enabled) {
+      if (quizMode === "AI_SHORT") {
+        state.quizCorrect = quizScore;
+        state.quizTotal = questions.length;
+        await loadLearningState();
+        state.quizFinished = true;
+      } else if (apiConfig.enabled) {
         const result = await apiRequest("/learning/diagnosis/attempts", {
           method: "POST", body: JSON.stringify({
             subjectCode: state.quizSubjectCode || state.subjects[0],
@@ -2646,7 +2694,7 @@
       $("#quizWorkspace").hidden = true;
       updateUI();
       const rate = Math.round((state.quizCorrect / Math.max(state.quizTotal, 1)) * 100);
-      toast(quizMode === "AI"
+      toast(quizMode === "AI" || quizMode === "AI_SHORT"
         ? `AI 문제 정답률 ${rate}%가 학습 통계와 오답 노트에 반영됐습니다.`
         : `정답률 ${rate}%가 대시보드에 반영됐어요.`);
       $("#dashboard").scrollIntoView({ behavior: "smooth", block: "start" });

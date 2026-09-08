@@ -885,6 +885,8 @@
     .question-kicker { color: var(--blue); font-size: 11px; font-weight: 900; }
     .question-title { margin: 8px 0 18px; font-size: 19px; line-height: 1.5; letter-spacing: -.035em; }
     .answers { display: grid; gap: 9px; }
+    .short-answer-input { width: 100%; min-height: 124px; padding: 13px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fbfefc; line-height: 1.55; resize: vertical; }
+    .short-answer-input:disabled { color: var(--muted); background: var(--sky-soft); }
     .answer {
       min-height: 50px;
       padding: 12px 14px;
@@ -1384,6 +1386,10 @@
           <button class="button secondary small" id="quizButton" type="button" disabled>기존 문제 풀기</button>
           <div class="ai-action-with-usage">
             <button class="button primary small" id="aiQuizButton" type="button" disabled>AI 문제 생성</button>
+            <span class="ai-average-note" data-ai-average="QUESTION_DRAFT">평균 사용 토큰 확인 중</span>
+          </div>
+          <div class="ai-action-with-usage" id="aiShortAnswerAction" hidden>
+            <button class="button primary small" id="aiShortAnswerQuizButton" type="button" disabled>AI 주관식 생성</button>
             <span class="ai-average-note" data-ai-average="QUESTION_DRAFT">평균 사용 토큰 확인 중</span>
           </div>
         </div>

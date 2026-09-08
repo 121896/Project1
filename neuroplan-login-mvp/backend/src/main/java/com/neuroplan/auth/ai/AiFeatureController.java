@@ -4,7 +4,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.text.Normalizer;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -26,6 +28,9 @@ import com.neuroplan.auth.ai.AiGenerationService.QuizOptionContent;
 import com.neuroplan.auth.ai.AiGenerationService.QuizQuestionContent;
 import com.neuroplan.auth.ai.AiGenerationService.RecommendationContext;
 import com.neuroplan.auth.ai.AiGenerationService.RecommendationGeneration;
+import com.neuroplan.auth.ai.AiGenerationService.ShortAnswerEvaluationGeneration;
+import com.neuroplan.auth.ai.AiGenerationService.ShortAnswerGeneration;
+import com.neuroplan.auth.ai.AiGenerationService.ShortAnswerQuestionContent;
 import com.neuroplan.auth.ai.AiGenerationService.WrongNoteContext;
 import com.neuroplan.auth.ai.AiQuotaService.AiQuotaResponse;
 import com.neuroplan.auth.auth.CurrentUserService;
@@ -124,8 +129,18 @@ public class AiFeatureController {
     ) {
         UserRecord user = currentUserService.require(request);
         ProfileSubject focus = profileSubject(user.id(), subjectCode);
+        String questionType = normalizeQuestionType(body == null ? null : body.questionType());
+        if ("SHORT_ANSWER".equals(questionType)) {
+            ShortAnswerGeneration generated = generationService.generateShortAnswerQuiz(
+                    user.id(), focus.subjectId(), focus.subjectCode(), focus.subjectName(), focus.levelLabel(),
+                    generationPrompt(focus.focusTopic(), body == null ? null : body.additionalPrompt()));
+            List<AiQuizQuestionResponse> questions = persistAiResult(
+                    user.id(), generated.generationRunId(), "AI 주관식 문제 저장 실패 환불",
+                    () -> saveShortAnswerQuestions(focus, generated));
+            return new AiQuizResponse(generated.generationRunId(), false, questions, generated.quota());
+        }
         QuizGeneration generated = generationService.generateQuiz(
-                user.id(), focus.subjectId(), focus.subjectName(), focus.levelLabel(),
+                user.id(), focus.subjectId(), focus.subjectCode(), focus.subjectName(), focus.levelLabel(),
                 generationPrompt(focus.focusTopic(), body == null ? null : body.additionalPrompt()));
         // AI 문제에도 실제 문제/보기 ID를 부여한다. 따라서 풀이 결과를 기존
         // diagnosis_attempts와 wrong_notes 흐름으로 그대로 기록할 수 있다.
@@ -161,7 +176,7 @@ public class AiFeatureController {
                         """, Integer.class, subject.subjectId());
                 if (count != null && count >= setting.targetCount()) continue;
                 QuizGeneration generated = generationService.generateQuiz(
-                        setting.ownerUserId(), subject.subjectId(), subject.subjectName(), subject.levelLabel(),
+                        setting.ownerUserId(), subject.subjectId(), subject.subjectCode(), subject.subjectName(), subject.levelLabel(),
                         generationPrompt(subject.focusTopic(), null));
                 persistAiResult(setting.ownerUserId(), generated.generationRunId(), "문제은행 자동 보충 저장 실패 환불",
                         () -> saveQuizQuestions(subject, generated));
@@ -193,6 +208,47 @@ public class AiFeatureController {
     ) {
         UserRecord user = currentUserService.require(request);
         return generationService.checkQuiz(user.id(), runId, body.questionNo(), body.selectedOptionNo());
+    }
+
+    @PostMapping("/questions/{runId}/short-answer/check")
+    public AiShortAnswerCheckResponse checkShortAnswer(
+            @PathVariable long runId,
+            @RequestBody AiShortAnswerCheckRequest body,
+            HttpServletRequest request
+    ) {
+        UserRecord user = currentUserService.require(request);
+        RunSubject run = jdbcTemplate.query("""
+                SELECT r.subject_id, s.code, s.name
+                  FROM ai_generation_runs r
+                  JOIN subjects s ON s.id = r.subject_id
+                 WHERE r.id = ? AND r.user_id = ? AND r.request_type = 'QUESTION_DRAFT'
+                """, (rs, rowNum) -> new RunSubject(
+                rs.getLong("subject_id"), rs.getString("code"), rs.getString("name")
+        ), runId, user.id()).stream().findFirst().orElseThrow(() -> new ApiException(
+                HttpStatus.NOT_FOUND, "AI 주관식 문제 세트를 찾을 수 없습니다."
+        ));
+        if (!"INFORMATION_PROCESSING_PRACTICAL".equals(run.subjectCode())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "정보처리기사 실기 주관식 문제만 AI 검토를 지원합니다.");
+        }
+        ShortAnswerStoredQuestion question = jdbcTemplate.query("""
+                SELECT id, question_text, reference_answer, accepted_answers_json, grading_rubric
+                  FROM diagnosis_questions
+                 WHERE id = ? AND subject_id = ? AND question_type = 'SHORT_ANSWER' AND is_active = TRUE
+                """, (rs, rowNum) -> new ShortAnswerStoredQuestion(
+                rs.getLong("id"), rs.getString("question_text"), rs.getString("reference_answer"),
+                rs.getString("accepted_answers_json"), rs.getString("grading_rubric")
+        ), body.questionId(), run.subjectId()).stream().findFirst().orElseThrow(() -> new ApiException(
+                HttpStatus.BAD_REQUEST, "AI 주관식 문제와 답안이 일치하지 않습니다."
+        ));
+        ShortAnswerEvaluationGeneration generated = generationService.evaluateShortAnswer(
+                user.id(), run.subjectId(), run.subjectName(), question.questionText(), question.referenceAnswer(),
+                question.acceptedAnswersJson(), question.gradingRubric(), body.answerText());
+        transactionTemplate.executeWithoutResult(status -> persistShortAnswerResult(
+                user.id(), run.subjectId(), question.id(), body.answerText(), generated));
+        return new AiShortAnswerCheckResponse(
+                generated.evaluation().correct(), generated.evaluation().score(), generated.evaluation().feedback(),
+                generated.evaluation().modelAnswer(), generated.generationRunId(), generated.quota()
+        );
     }
 
     @PostMapping("/wrong-notes/{questionId}/feedback")
@@ -409,8 +465,97 @@ public class AiFeatureController {
                 return new AiQuizOptionResponse(optionKeys.getKey().longValue(), option.optionNo(), option.text());
             }).toList();
             return new AiQuizQuestionResponse(questionId, question.questionNo(), question.subjectName(),
-                    question.difficulty(), question.text(), options);
+                    question.difficulty(), "MULTIPLE_CHOICE", question.text(), options);
         }).toList();
+    }
+
+    private List<AiQuizQuestionResponse> saveShortAnswerQuestions(ProfileSubject focus, ShortAnswerGeneration generated) {
+        Integer highestQuestionNo = jdbcTemplate.query("""
+                SELECT question_no FROM diagnosis_questions WHERE subject_id = ?
+                 ORDER BY question_no DESC LIMIT 1 FOR UPDATE
+                """, (rs, rowNum) -> rs.getInt("question_no"), focus.subjectId())
+                .stream().findFirst().orElse(0);
+        int[] nextQuestionNo = { highestQuestionNo == null ? 1 : highestQuestionNo + 1 };
+        Set<String> knownHashes = new HashSet<>(jdbcTemplate.queryForList("""
+                SELECT content_hash FROM diagnosis_questions
+                 WHERE subject_id = ? AND content_hash IS NOT NULL
+                """, String.class, focus.subjectId()));
+        List<ShortAnswerQuestionContent> uniqueQuestions = new ArrayList<>();
+        for (ShortAnswerQuestionContent question : generated.content().questions()) {
+            String hash = shortAnswerContentHash(question);
+            if (!knownHashes.add(hash)) continue;
+            uniqueQuestions.add(question);
+        }
+        if (uniqueQuestions.size() != generated.content().questions().size()) {
+            throw new DuplicateQuestionException(
+                    "DUPLICATE_QUESTION: 기존 문제와 중복된 AI 주관식 문제가 포함되었습니다. 다시 시도해 주세요.");
+        }
+        return uniqueQuestions.stream().map(question -> {
+            GeneratedKeyHolder keys = new GeneratedKeyHolder();
+            jdbcTemplate.update(connection -> {
+                PreparedStatement statement = connection.prepareStatement("""
+                        INSERT INTO diagnosis_questions (
+                            subject_id, question_no, difficulty, question_type, question_text, content_hash,
+                            explanation, reference_answer, accepted_answers_json, grading_rubric,
+                            is_active, created_at, updated_at
+                        ) VALUES (?, ?, ?, 'SHORT_ANSWER', ?, ?, ?, ?, ?, ?, TRUE,
+                                  CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
+                        """, Statement.RETURN_GENERATED_KEYS);
+                statement.setLong(1, focus.subjectId());
+                statement.setInt(2, nextQuestionNo[0]++);
+                statement.setString(3, difficultyCode(question.difficulty()));
+                statement.setString(4, question.text());
+                statement.setString(5, shortAnswerContentHash(question));
+                statement.setString(6, question.explanation());
+                statement.setString(7, question.referenceAnswer());
+                statement.setString(8, writeJson(question.acceptedAnswers()));
+                statement.setString(9, question.gradingRubric());
+                return statement;
+            }, keys);
+            if (keys.getKey() == null) throw new IllegalStateException("AI 주관식 문제 번호를 생성하지 못했습니다.");
+            long questionId = keys.getKey().longValue();
+            return new AiQuizQuestionResponse(questionId, question.questionNo(), question.subjectName(),
+                    question.difficulty(), "SHORT_ANSWER", question.text(), List.of());
+        }).toList();
+    }
+
+    private void persistShortAnswerResult(long userId, long subjectId, long questionId, String answerText,
+                                          ShortAnswerEvaluationGeneration generated) {
+        LocalDateTime now = LocalDateTime.now();
+        long attemptId = insertAndReturnId("""
+                INSERT INTO diagnosis_attempts (
+                    user_id, subject_id, attempt_type, attempt_status,
+                    total_questions, correct_answers, started_at, completed_at
+                ) VALUES (?, ?, 'DIAGNOSTIC', 'COMPLETED', 1, ?, ?, ?)
+                """, userId, subjectId, generated.evaluation().correct() ? 1 : 0,
+                Timestamp.valueOf(now.minusSeconds(1)), Timestamp.valueOf(now));
+        jdbcTemplate.update("""
+                INSERT INTO diagnosis_answers (
+                    attempt_id, question_id, selected_option_id, answer_text, is_correct,
+                    evaluation_detail, evaluated_by, evaluated_at, answered_at
+                ) VALUES (?, ?, NULL, ?, ?, ?, 'AI', ?, ?)
+                """, attemptId, questionId, answerText.trim(), generated.evaluation().correct(),
+                writeJson(generated.evaluation()), Timestamp.valueOf(now), Timestamp.valueOf(now));
+        if (!generated.evaluation().correct()) {
+            jdbcTemplate.update("""
+                    INSERT INTO wrong_notes (
+                        user_id, question_id, last_attempt_id, wrong_count,
+                        is_relearned, first_wrong_at, last_wrong_at, relearned_at
+                    ) VALUES (?, ?, ?, 1, FALSE, ?, ?, NULL)
+                    ON DUPLICATE KEY UPDATE
+                        last_attempt_id = VALUES(last_attempt_id), wrong_count = wrong_count + 1,
+                        is_relearned = FALSE, last_wrong_at = VALUES(last_wrong_at), relearned_at = NULL
+                    """, userId, questionId, attemptId, Timestamp.valueOf(now), Timestamp.valueOf(now));
+        }
+        jdbcTemplate.update("""
+                INSERT INTO study_daily_stats (
+                    user_id, study_date, solved_count, correct_count, completed_step_count, updated_at
+                ) VALUES (?, CURRENT_DATE, 1, ?, 0, CURRENT_TIMESTAMP(6))
+                ON DUPLICATE KEY UPDATE
+                    solved_count = solved_count + 1,
+                    correct_count = correct_count + VALUES(correct_count),
+                    updated_at = CURRENT_TIMESTAMP(6)
+                """, userId, generated.evaluation().correct() ? 1 : 0);
     }
 
     private Set<String> existingQuestionHashes(long subjectId) {
@@ -443,6 +588,17 @@ public class AiFeatureController {
 
     private String questionContentHash(QuizQuestionContent question) {
         return questionContentHash(difficultyCode(question.difficulty()), question.text(), question.options());
+    }
+
+    private String shortAnswerContentHash(ShortAnswerQuestionContent question) {
+        String source = difficultyCode(question.difficulty()) + "\n" + question.text().trim() + "\n"
+                + String.join("\n", question.acceptedAnswers()).trim();
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(source.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception exception) {
+            throw new IllegalStateException("AI 주관식 문제 해시를 생성하지 못했습니다.", exception);
+        }
     }
 
     private String questionContentHash(String difficulty, String questionText, List<QuizOptionContent> options) {
@@ -496,15 +652,15 @@ public class AiFeatureController {
     private WrongNoteContext wrongNoteContext(long userId, long questionId) {
         return jdbcTemplate.query("""
                 SELECT wn.question_id, q.subject_id, s.name AS subject_name, q.question_text, q.explanation,
-                       COALESCE(selected.option_text, '기록 없음') AS selected_answer,
-                       correct.option_text AS correct_answer
+                       COALESCE(da.answer_text, selected.option_text, '기록 없음') AS selected_answer,
+                       COALESCE(q.reference_answer, correct.option_text, '정답 정보 없음') AS correct_answer
                   FROM wrong_notes wn
                   JOIN diagnosis_questions q ON q.id = wn.question_id
                   JOIN subjects s ON s.id = q.subject_id
              LEFT JOIN diagnosis_answers da
                     ON da.attempt_id = wn.last_attempt_id AND da.question_id = wn.question_id
              LEFT JOIN question_options selected ON selected.id = da.selected_option_id
-                  JOIN question_options correct ON correct.question_id = q.id AND correct.is_correct = TRUE
+             LEFT JOIN question_options correct ON correct.question_id = q.id AND correct.is_correct = TRUE
                  WHERE wn.user_id = ? AND wn.question_id = ?
                 """, (rs, rowNum) -> new WrongNoteContext(
                 rs.getLong("question_id"), rs.getLong("subject_id"), rs.getString("subject_name"),
@@ -588,6 +744,17 @@ public class AiFeatureController {
         catch (JsonProcessingException exception) { throw new IllegalStateException("AI 결과 JSON을 저장하지 못했습니다.", exception); }
     }
 
+    private long insertAndReturnId(String sql, Object... parameters) {
+        GeneratedKeyHolder keys = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            for (int index = 0; index < parameters.length; index++) statement.setObject(index + 1, parameters[index]);
+            return statement;
+        }, keys);
+        if (keys.getKey() == null) throw new IllegalStateException("DB에서 생성 번호를 확인하지 못했습니다.");
+        return keys.getKey().longValue();
+    }
+
     private List<String> readStringList(String value) {
         if (value == null || value.isBlank()) return List.of();
         try {
@@ -636,6 +803,14 @@ public class AiFeatureController {
         return normalizedPrompt.isBlank() ? topicInstruction : topicInstruction + "\n" + normalizedPrompt;
     }
 
+    private String normalizeQuestionType(String value) {
+        String normalized = value == null ? "MULTIPLE_CHOICE" : value.trim().toUpperCase(Locale.ROOT);
+        if (!"MULTIPLE_CHOICE".equals(normalized) && !"SHORT_ANSWER".equals(normalized)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "문제 유형이 올바르지 않습니다.");
+        }
+        return normalized;
+    }
+
     private record ProfileSubject(long subjectId, String subjectCode, String subjectName,
                                   String levelLabel, String focusTopic) {}
     private record PlanHeader(long id, String title, String status, long subjectId, String subjectCode, String subjectName) {}
@@ -646,7 +821,7 @@ public class AiFeatureController {
                                  String rationale, AiQuotaResponse quota) {}
     public record AiQuizOptionResponse(long id, int optionNo, String text) {}
     public record AiQuizQuestionResponse(long id, int questionNo, String subjectName, String difficulty,
-                                         String text, List<AiQuizOptionResponse> options) {}
+                                         String questionType, String text, List<AiQuizOptionResponse> options) {}
     public record AiQuizResponse(long generationRunId, boolean fallback,
                                  List<AiQuizQuestionResponse> questions, AiQuotaResponse quota) {}
     public record AiQuizCheckRequest(int questionNo, int selectedOptionNo) {}
@@ -656,7 +831,10 @@ public class AiFeatureController {
                                            String content, int priority, AiQuotaResponse quota) {}
     public record AiPreferenceRequest(boolean enabled, boolean consent, String explanationStyle,
                                       int availableMinutes) {}
-    public record AiPromptRequest(String additionalPrompt) {}
+    public record AiPromptRequest(String additionalPrompt, String questionType) {}
+    public record AiShortAnswerCheckRequest(long questionId, String answerText) {}
+    public record AiShortAnswerCheckResponse(boolean correct, int score, String feedback, String modelAnswer,
+                                             long generationRunId, AiQuotaResponse quota) {}
     public record AiFeedbackSummary(long id, long questionId, long generationRunId, String feedback,
                                     List<String> recommendedActions, java.time.Instant createdAt) {}
     public record AiRecommendationSummary(long id, long subjectId, String subjectCode, String subjectName,
@@ -664,6 +842,9 @@ public class AiFeatureController {
                                           java.time.Instant createdAt) {}
     private record StoredQuestionOption(long questionId, String difficulty, String questionText,
                                         int optionNo, String optionText, boolean correct) {}
+    private record RunSubject(long subjectId, String subjectCode, String subjectName) {}
+    private record ShortAnswerStoredQuestion(long id, String questionText, String referenceAnswer,
+                                             String acceptedAnswersJson, String gradingRubric) {}
     private record ProblemBankSetting(long ownerUserId, int targetCount) {}
     private static final class DuplicateQuestionException extends RuntimeException {
         private DuplicateQuestionException(String message) { super(message); }

@@ -518,12 +518,13 @@
     #adminQuestionForm { grid-template-columns: minmax(0, 1.1fr) minmax(0, .7fr) minmax(0, 1.5fr) minmax(0, 1.35fr); align-items: end; gap: 12px; }
     #adminQuestionForm .field:nth-child(4), #adminQuestionForm .field:nth-child(5) { grid-column: span 2; }
     #adminQuestionForm .admin-user-actions { grid-column: 1 / -1; }
-    #adminSubjectList, #adminQuestionList { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    #adminQuestionList .history-item { min-width: 0; display: flex; align-items: flex-start; gap: 8px; }
+    #adminSubjectList { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #adminQuestionList { grid-template-columns: 1fr; }
+    #adminQuestionList .history-item { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
     #adminQuestionList .history-item > div:first-child { min-width: 0; }
     #adminQuestionList .history-item strong, #adminQuestionList .history-item p { overflow-wrap: anywhere; }
-    #adminQuestionList .admin-user-actions { flex: 0 0 74px; flex-direction: column; }
-    #adminQuestionList .admin-user-actions .button { width: 74px; white-space: normal; }
+    #adminQuestionList .admin-user-actions { flex: 0 0 auto; flex-direction: row; align-items: center; }
+    #adminQuestionList .admin-user-actions .button { white-space: nowrap; }
     .admin-operations-grid { grid-template-columns: 1fr; }
     .admin-operations-grid > .content-card { min-width: 0; }
     .admin-content-grid { grid-template-columns: 1fr; }

@@ -33,6 +33,7 @@
     isAdmin: false,
     subjects: [],
     subjectLevels: {},
+    subjectFocus: {},
     activeSubjectCode: "",
     quizSubjectCode: "",
     plans: [],
@@ -124,6 +125,7 @@
   let authMode = "signup";
   let draftSubjects = [];
   let draftSubjectLevels = {};
+  let draftSubjectFocus = {};
   let questions = [];
   let quizAnswers = [];
   let quizIndex = 0;
@@ -264,6 +266,7 @@
         ...defaultState,
         ...saved,
         subjectLevels: { ...(saved.subjectLevels || {}) },
+        subjectFocus: { ...(saved.subjectFocus || {}) },
         tasks: Array.isArray(saved.tasks) ? saved.tasks.slice(0, 3) : [false, false, false],
         stats: { ...defaultState.stats, ...(saved.stats || {}) },
         dashboard: { ...defaultState.dashboard, ...(saved.dashboard || {}) },
@@ -320,12 +323,30 @@
     return /^(INFORMATION_PROCESSING_|LINUX_MASTER_2_)/.test(String(code || "").toUpperCase());
   }
 
+  function isPracticalCertification(code) {
+    return String(code || "").toUpperCase() === "INFORMATION_PROCESSING_PRACTICAL";
+  }
+
+  function certificationStageLabel(code) {
+    return {
+      INFORMATION_PROCESSING_WRITTEN: "필기",
+      INFORMATION_PROCESSING_PRACTICAL: "실기",
+      LINUX_MASTER_2_FIRST: "1차",
+      LINUX_MASTER_2_SECOND: "2차"
+    }[String(code || "").toUpperCase()] || "자격증";
+  }
+
   function hasCompleteProfile(profile = state) {
-    return profile.subjects.length > 0 && profile.subjects.every(code => Boolean(profile.subjectLevels[code]));
+    return profile.subjects.length > 0 && profile.subjects.every(code =>
+      Boolean(profile.subjectLevels[code]) && (!isPracticalCertification(code) || Boolean(profile.subjectFocus?.[code]))
+    );
   }
 
   function profileLabel(profile = state) {
-    return profile.subjects.map(code => `${subjectName(code)} · ${profile.subjectLevels[code]}`).join(", ");
+    return profile.subjects.map(code => {
+      const focus = profile.subjectFocus?.[code];
+      return `${subjectName(code)} · ${profile.subjectLevels[code]}${focus ? ` · ${focus}` : ""}`;
+    }).join(", ");
   }
 
   function clearAuthFields() {
@@ -1087,6 +1108,7 @@
   function applyProfile(profile = []) {
     state.subjects = profile.map(item => item.subjectCode);
     state.subjectLevels = Object.fromEntries(profile.map(item => [item.subjectCode, item.levelLabel]));
+    state.subjectFocus = Object.fromEntries(profile.filter(item => item.focusTopic).map(item => [item.subjectCode, item.focusTopic]));
     if (!state.subjects.includes(state.activeSubjectCode)) state.activeSubjectCode = state.subjects[0] || "";
     if (!state.subjects.includes(state.quizSubjectCode)) state.quizSubjectCode = state.subjects[0] || "";
   }
@@ -1279,15 +1301,18 @@
       return;
     }
     const descriptions = { "초급": "개념부터", "중급": "실습 중심", "고급": "설계 중심" };
+    const practicalTopics = ["전체 범위", "프로그래밍", "SQL", "운영체제", "네트워크", "보안"];
     $("#subjectLevelSettings").innerHTML = draftSubjects.map(code => `
-      <section class="subject-level-row" aria-label="${escapeHtml(subjectName(code))} 수준 설정">
-        <div class="subject-level-head"><strong>${escapeHtml(subjectName(code))}</strong><span>${draftSubjectLevels[code] ? `${draftSubjectLevels[code]} 선택됨` : "수준을 선택해 주세요"}</span></div>
-        <div class="subject-level-buttons">
+      <section class="subject-level-row" aria-label="${escapeHtml(subjectName(code))} ${isPracticalCertification(code) ? "시험 영역" : isCertificationSubject(code) ? "시험 단계" : "수준"} 설정">
+        <div class="subject-level-head"><strong>${escapeHtml(subjectName(code))}</strong><span>${isCertificationSubject(code) ? (isPracticalCertification(code) ? `${escapeHtml(draftSubjectFocus[code] || "전체 범위")} 선택됨` : "시험 과목은 난이도를 선택하지 않습니다") : (draftSubjectLevels[code] ? `${draftSubjectLevels[code]} 선택됨` : "수준을 선택해 주세요")}</span></div>
+        ${isPracticalCertification(code) ? `<div class="subject-level-buttons focus-topic-buttons">
+          ${practicalTopics.map(topic => `<button class="level-choice${(draftSubjectFocus[code] || "전체 범위") === topic ? " selected" : ""}" type="button" data-focus-subject="${escapeHtml(code)}" data-focus-topic="${escapeHtml(topic)}"><strong>${escapeHtml(topic)}</strong><span>${topic === "전체 범위" ? "모든 출제 영역" : "선택 영역 집중"}</span></button>`).join("")}
+        </div>` : isCertificationSubject(code) ? `<div class="certification-fixed-level">시험 단계 기준으로 출제합니다.</div>` : `<div class="subject-level-buttons">
           ${["초급", "중급", "고급"].map(level => `
             <button class="level-choice${draftSubjectLevels[code] === level ? " selected" : ""}" type="button" data-level-subject="${escapeHtml(code)}" data-level="${level}">
               <strong>${level}</strong><span>${descriptions[level]}</span>
             </button>`).join("")}
-        </div>
+        </div>`}
       </section>`).join("");
   }
 
@@ -1581,6 +1606,11 @@
     }
     draftSubjects = [...state.subjects];
     draftSubjectLevels = { ...state.subjectLevels };
+    draftSubjectFocus = { ...state.subjectFocus };
+    draftSubjects.filter(isCertificationSubject).forEach(code => {
+      draftSubjectLevels[code] = certificationStageLabel(code);
+      if (isPracticalCertification(code) && !draftSubjectFocus[code]) draftSubjectFocus[code] = "전체 범위";
+    });
     renderSubjectChoices();
     renderSubjectLevelSettings();
     $("#profileMessage").textContent = "";
@@ -1880,12 +1910,17 @@
       if (draftSubjects.includes(code)) {
         draftSubjects = draftSubjects.filter(item => item !== code);
         delete draftSubjectLevels[code];
+        delete draftSubjectFocus[code];
       } else {
         if (draftSubjects.length >= 3) {
           $("#profileMessage").textContent = "학습 과목은 최대 3개까지 선택할 수 있습니다.";
           return;
         }
         draftSubjects.push(code);
+        if (isCertificationSubject(code)) {
+          draftSubjectLevels[code] = certificationStageLabel(code);
+          if (isPracticalCertification(code)) draftSubjectFocus[code] = "전체 범위";
+        }
       }
       $("#profileMessage").textContent = "";
       renderSubjectChoices();
@@ -1895,6 +1930,12 @@
     const level = event.target.closest("[data-level-subject]");
     if (level) {
       draftSubjectLevels[level.dataset.levelSubject] = level.dataset.level;
+      renderSubjectLevelSettings();
+    }
+
+    const focus = event.target.closest("[data-focus-subject]");
+    if (focus) {
+      draftSubjectFocus[focus.dataset.focusSubject] = focus.dataset.focusTopic;
       renderSubjectLevelSettings();
     }
 
@@ -1963,12 +2004,19 @@
       if (apiConfig.enabled) {
         const profile = await apiRequest("/learning/profile", {
           method: "PUT",
-          body: JSON.stringify({ subjects: draftSubjects.map(code => ({ code, learningLevel: levelToApi[draftSubjectLevels[code]] })) })
+          body: JSON.stringify({ subjects: draftSubjects.map(code => ({
+            code,
+            learningLevel: isCertificationSubject(code) ? "BEGINNER" : levelToApi[draftSubjectLevels[code]],
+            focusTopic: isPracticalCertification(code) ? (draftSubjectFocus[code] || "전체 범위") : null
+          })) })
         });
         applyProfile(profile);
       } else {
         state.subjects = [...draftSubjects];
         state.subjectLevels = Object.fromEntries(state.subjects.map(code => [code, draftSubjectLevels[code]]));
+        state.subjectFocus = Object.fromEntries(state.subjects
+          .filter(code => isPracticalCertification(code) && draftSubjectFocus[code])
+          .map(code => [code, draftSubjectFocus[code]]));
       }
       state.plans = [];
       applyPlan(null);

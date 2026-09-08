@@ -109,7 +109,7 @@ public class AiFeatureController {
         ProfileSubject focus = profileSubject(user.id(), subjectCode);
         PlanGeneration generated = generationService.generatePlan(
                 user.id(), focus.subjectId(), focus.subjectName(), focus.levelLabel(),
-                normalizeAdditionalPrompt(body == null ? null : body.additionalPrompt()));
+                generationPrompt(focus.focusTopic(), body == null ? null : body.additionalPrompt()));
         long planId = persistAiResult(user.id(), generated.generationRunId(), "AI 플랜 저장 실패 환불",
                 () -> savePlan(user.id(), focus, generated));
         return new AiPlanResponse(plan(planId, user.id()), generated.generationRunId(),
@@ -126,7 +126,7 @@ public class AiFeatureController {
         ProfileSubject focus = profileSubject(user.id(), subjectCode);
         QuizGeneration generated = generationService.generateQuiz(
                 user.id(), focus.subjectId(), focus.subjectName(), focus.levelLabel(),
-                normalizeAdditionalPrompt(body == null ? null : body.additionalPrompt()));
+                generationPrompt(focus.focusTopic(), body == null ? null : body.additionalPrompt()));
         // AI 문제에도 실제 문제/보기 ID를 부여한다. 따라서 풀이 결과를 기존
         // diagnosis_attempts와 wrong_notes 흐름으로 그대로 기록할 수 있다.
         List<AiQuizQuestionResponse> questions = persistAiResult(
@@ -148,19 +148,21 @@ public class AiFeatureController {
             if (settings.isEmpty()) return;
             ProblemBankSetting setting = settings.getFirst();
             List<ProfileSubject> subjects = jdbcTemplate.query("""
-                    SELECT us.subject_id, s.code, s.name, us.learning_level
+                    SELECT us.subject_id, s.code, s.name, us.learning_level, us.focus_topic
                       FROM user_subjects us JOIN subjects s ON s.id = us.subject_id
                      WHERE us.user_id = ? AND s.is_active = TRUE ORDER BY us.slot_no
                     """, (rs, rowNum) -> new ProfileSubject(
                     rs.getLong("subject_id"), rs.getString("code"), rs.getString("name"),
-                    levelLabel(rs.getString("learning_level"))), setting.ownerUserId());
+                    certificationStageLabel(rs.getString("code"), levelLabel(rs.getString("learning_level"))),
+                    rs.getString("focus_topic")), setting.ownerUserId());
             for (ProfileSubject subject : subjects) {
                 Integer count = jdbcTemplate.queryForObject("""
                         SELECT COUNT(*) FROM diagnosis_questions WHERE subject_id = ? AND is_active = TRUE
                         """, Integer.class, subject.subjectId());
                 if (count != null && count >= setting.targetCount()) continue;
                 QuizGeneration generated = generationService.generateQuiz(
-                        setting.ownerUserId(), subject.subjectId(), subject.subjectName(), subject.levelLabel());
+                        setting.ownerUserId(), subject.subjectId(), subject.subjectName(), subject.levelLabel(),
+                        generationPrompt(subject.focusTopic(), null));
                 persistAiResult(setting.ownerUserId(), generated.generationRunId(), "문제은행 자동 보충 저장 실패 환불",
                         () -> saveQuizQuestions(subject, generated));
                 jdbcTemplate.update("""
@@ -232,7 +234,7 @@ public class AiFeatureController {
         RecommendationGeneration generated = generationService.generateRecommendation(
                 user.id(), new RecommendationContext(
                         focus.subjectId(), focus.subjectName(), focus.levelLabel(), summary),
-                normalizeAdditionalPrompt(body == null ? null : body.additionalPrompt()));
+                generationPrompt(focus.focusTopic(), body == null ? null : body.additionalPrompt()));
         long queueId = persistAiResult(user.id(), generated.generationRunId(), "AI 재학습 추천 저장 실패 환불",
                 () -> insertRecommendation(user.id(), focus.subjectId(), generated));
         return new AiRecommendationResponse(queueId, generated.generationRunId(), generated.fallback(),
@@ -266,13 +268,14 @@ public class AiFeatureController {
     private ProfileSubject profileSubject(long userId, String subjectCode) {
         String code = subjectCode == null ? "" : subjectCode.trim().toUpperCase(java.util.Locale.ROOT);
         return jdbcTemplate.query("""
-                SELECT us.subject_id, s.code, s.name, us.learning_level
+                SELECT us.subject_id, s.code, s.name, us.learning_level, us.focus_topic
                   FROM user_subjects us
                   JOIN subjects s ON s.id = us.subject_id
                  WHERE us.user_id = ? AND s.code = ? AND s.is_active = TRUE
                 """, (rs, rowNum) -> new ProfileSubject(
                 rs.getLong("subject_id"), rs.getString("code"), rs.getString("name"),
-                levelLabel(rs.getString("learning_level"))
+                certificationStageLabel(rs.getString("code"), levelLabel(rs.getString("learning_level"))),
+                rs.getString("focus_topic")
         ), userId, code).stream().findFirst().orElseThrow(() -> new ApiException(
                 HttpStatus.BAD_REQUEST, "학습 프로필에 선택한 과목이 없습니다: " + code
         ));
@@ -612,7 +615,29 @@ public class AiFeatureController {
         return normalized;
     }
 
-    private record ProfileSubject(long subjectId, String subjectCode, String subjectName, String levelLabel) {}
+    private boolean isPracticalCertification(String code) {
+        return "INFORMATION_PROCESSING_PRACTICAL".equalsIgnoreCase(code);
+    }
+
+    private String certificationStageLabel(String code, String fallback) {
+        return switch (String.valueOf(code).toUpperCase(java.util.Locale.ROOT)) {
+            case "INFORMATION_PROCESSING_WRITTEN" -> "필기";
+            case "INFORMATION_PROCESSING_PRACTICAL" -> "실기";
+            case "LINUX_MASTER_2_FIRST" -> "1차";
+            case "LINUX_MASTER_2_SECOND" -> "2차";
+            default -> fallback;
+        };
+    }
+
+    private String generationPrompt(String focusTopic, String additionalPrompt) {
+        String normalizedPrompt = normalizeAdditionalPrompt(additionalPrompt);
+        if (focusTopic == null || focusTopic.isBlank()) return normalizedPrompt;
+        String topicInstruction = "시험 영역: " + focusTopic;
+        return normalizedPrompt.isBlank() ? topicInstruction : topicInstruction + "\n" + normalizedPrompt;
+    }
+
+    private record ProfileSubject(long subjectId, String subjectCode, String subjectName,
+                                  String levelLabel, String focusTopic) {}
     private record PlanHeader(long id, String title, String status, long subjectId, String subjectCode, String subjectName) {}
     public record PlanStepResponse(long id, int stepNo, String title, String content, String status) {}
     public record PlanResponse(long id, String title, String status, long subjectId, String subjectCode,

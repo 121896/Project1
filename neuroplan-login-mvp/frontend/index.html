@@ -533,7 +533,7 @@
     .admin-question-card { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(360px, 1.2fr); gap: 16px 22px; align-items: start; }
     .admin-question-card > .card-head { grid-column: 1 / -1; }
     .admin-question-card > #adminQuestionForm { grid-column: 1; }
-    .admin-question-card > #adminQuestionList { grid-column: 2; grid-row: 2; max-height: 430px; margin-top: 0 !important; overflow-y: auto; padding-right: 4px; }
+    .admin-question-card > #adminQuestionList { grid-column: 2; grid-row: 2; max-height: 430px; margin-top: 0 !important; overflow-y: auto; padding: 0 4px 0 22px; border-left: 1px solid var(--line); }
 
     .main-grid { margin-top: 16px; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr); gap: 16px; }
     .content-card { padding: 24px; }
@@ -1010,6 +1010,7 @@
       .admin-question-card { grid-template-columns: 1fr; }
       .admin-question-card > #adminQuestionForm, .admin-question-card > #adminQuestionList { grid-column: 1; }
       .admin-question-card > #adminQuestionList { grid-row: auto; max-height: 300px; }
+      .admin-question-card > #adminQuestionList { padding: 16px 0 0; border-top: 1px solid var(--line); border-left: 0; }
       #adminSubjectForm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       #adminSubjectForm .button { grid-column: 1 / -1; }
       #adminQuestionForm { grid-template-columns: 1fr; }

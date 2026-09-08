@@ -1576,9 +1576,6 @@
     else if (!tasksDone) $("#mainAction").textContent = "오늘 학습 이어하기";
     else if (!state.quizFinished) $("#mainAction").textContent = "확인 문제 풀기";
     else $("#mainAction").textContent = "오늘 학습 완료";
-    $("#profileAction").hidden = !hasProfile;
-    if (hasProfile) $("#profileAction").textContent = "학습 프로필 수정";
-
     renderDashboardDetails();
     renderSubjectTabs();
     renderPlanHistory();
@@ -2103,7 +2100,6 @@
   $("#quizButton").addEventListener("click", () => startQuiz("BANK"));
   $("#aiQuizButton").addEventListener("click", () => requestAiPrompt("quiz", prompt => startQuiz("AI", prompt)));
   $("#editProfile").addEventListener("click", openProfile);
-  $("#profileAction").addEventListener("click", openProfile);
   $("#loginButton").addEventListener("click", () => { setAuthMode("login"); openModal("authModal"); });
   $("#signupButton").addEventListener("click", () => { setAuthMode("signup"); openModal("authModal"); });
   $("#userMenuButton").addEventListener("click", () => {

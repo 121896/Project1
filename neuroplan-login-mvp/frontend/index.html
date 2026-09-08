@@ -429,12 +429,11 @@
       box-shadow: 0 7px 22px rgba(59,100,79,.065);
     }
     .metric-card { min-height: 142px; padding: 20px; }
-    .metric-progress-layout { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .metric-gauge-center { min-height: 82px; display: grid; place-items: center; }
     .progress-gauge {
       --progress: 0%;
-      width: 68px;
-      height: 68px;
-      flex: 0 0 68px;
+      width: 70px;
+      height: 70px;
       position: relative;
       display: grid;
       place-items: center;
@@ -1282,17 +1281,17 @@
     <section class="metric-grid" data-page-section="dashboard" aria-label="학습 요약">
       <article class="metric-card">
         <div class="metric-top"><span class="metric-label">전체 진도율</span><span class="metric-icon">↗</span></div>
-        <div class="metric-progress-layout"><div class="metric-value"><span id="overallProgress">0</span><small>%</small></div><div class="progress-gauge" id="overallProgressGauge" role="img" aria-label="전체 진도율 0%"><strong id="overallProgressGaugeText">0%</strong></div></div>
+        <div class="metric-gauge-center"><div class="progress-gauge" id="overallProgressGauge" role="img" aria-label="전체 진도율 0%"><strong id="overallProgressGaugeText">0%</strong></div></div>
         <div class="metric-caption" id="overallCaption">첫 학습을 시작하면 반영돼요.</div>
       </article>
       <article class="metric-card">
         <div class="metric-top"><span class="metric-label">완료한 학습</span><span class="metric-icon">✓</span></div>
-        <div class="metric-value"><span id="completedCount">0</span><small>/ 3단계</small></div>
+        <div class="metric-gauge-center"><div class="progress-gauge" id="completedProgressGauge" role="img" aria-label="완료한 학습 0%"><strong id="completedProgressGaugeText">0%</strong></div></div>
         <div class="metric-caption">오늘 플랜 기준</div>
       </article>
       <article class="metric-card">
         <div class="metric-top"><span class="metric-label">문제 정답률</span><span class="metric-icon">?</span></div>
-        <div class="metric-value"><span id="accuracyValue">-</span><small id="accuracyUnit"></small></div>
+        <div class="metric-gauge-center"><div class="progress-gauge" id="accuracyProgressGauge" role="img" aria-label="문제 정답률 확인 전"><strong id="accuracyProgressGaugeText">-</strong></div></div>
         <div class="metric-caption" id="accuracyCaption">문제 풀이 후 계산돼요.</div>
       </article>
     </section>
@@ -1952,18 +1951,26 @@
         $("#heroProgressText").textContent = `${progress}%`;
         $("#heroProgressBar").style.width = `${progress}%`;
         $("#heroProgress").setAttribute("aria-valuenow", String(progress));
-        $("#completedCount").textContent = String(completed);
-        $("#overallProgress").textContent = state.quizFinished ? "100" : String(progress);
+        const overallProgress = state.quizFinished ? 100 : progress;
+        $("#overallProgressGauge").style.setProperty("--progress", `${overallProgress}%`);
+        $("#overallProgressGauge").setAttribute("aria-label", `전체 진도율 ${overallProgress}%`);
+        $("#overallProgressGaugeText").textContent = `${overallProgress}%`;
+        const completedProgress = Math.round((completed / 3) * 100);
+        $("#completedProgressGauge").style.setProperty("--progress", `${completedProgress}%`);
+        $("#completedProgressGauge").setAttribute("aria-label", `완료한 학습 ${completedProgress}%`);
+        $("#completedProgressGaugeText").textContent = `${completedProgress}%`;
         $("#overallCaption").textContent = state.quizFinished ? "오늘 학습이 대시보드에 반영됐어요." : completed ? "오늘 플랜을 진행하고 있어요." : "첫 학습을 시작하면 반영돼요.";
 
         if (state.quizFinished) {
           const accuracy = Math.round((state.quizCorrect / questions.length) * 100);
-          $("#accuracyValue").textContent = String(accuracy);
-          $("#accuracyUnit").textContent = "%";
+          $("#accuracyProgressGauge").style.setProperty("--progress", `${accuracy}%`);
+          $("#accuracyProgressGauge").setAttribute("aria-label", `문제 정답률 ${accuracy}%`);
+          $("#accuracyProgressGaugeText").textContent = `${accuracy}%`;
           $("#accuracyCaption").textContent = `${questions.length}문제 중 ${state.quizCorrect}문제 정답`;
         } else {
-          $("#accuracyValue").textContent = "-";
-          $("#accuracyUnit").textContent = "";
+          $("#accuracyProgressGauge").style.setProperty("--progress", "0%");
+          $("#accuracyProgressGauge").setAttribute("aria-label", "문제 정답률 확인 전");
+          $("#accuracyProgressGaugeText").textContent = "-";
           $("#accuracyCaption").textContent = "문제 풀이 후 계산돼요.";
         }
 

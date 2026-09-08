@@ -1572,22 +1572,26 @@
     $("#heroProgressText").textContent = `${progress}%`;
     $("#heroProgressBar").style.width = `${progress}%`;
     $("#heroProgress").setAttribute("aria-valuenow", String(progress));
-    $("#completedCount").textContent = String(completed);
     const overallProgress = state.quizFinished ? 100 : progress;
-    $("#overallProgress").textContent = String(overallProgress);
     $("#overallProgressGauge").style.setProperty("--progress", `${overallProgress}%`);
     $("#overallProgressGauge").setAttribute("aria-label", `전체 진도율 ${overallProgress}%`);
     $("#overallProgressGaugeText").textContent = `${overallProgress}%`;
+    const completedProgress = Math.round((completed / 3) * 100);
+    $("#completedProgressGauge").style.setProperty("--progress", `${completedProgress}%`);
+    $("#completedProgressGauge").setAttribute("aria-label", `완료한 학습 ${completedProgress}%`);
+    $("#completedProgressGaugeText").textContent = `${completedProgress}%`;
     $("#overallCaption").textContent = state.quizFinished ? "오늘 학습이 대시보드에 반영됐어요." : completed ? "오늘 플랜을 진행하고 있어요." : "첫 학습을 시작하면 반영돼요.";
 
     if (state.quizFinished) {
       const accuracy = Math.round((state.quizCorrect / Math.max(state.quizTotal, 1)) * 100);
-      $("#accuracyValue").textContent = String(accuracy);
-      $("#accuracyUnit").textContent = "%";
+      $("#accuracyProgressGauge").style.setProperty("--progress", `${accuracy}%`);
+      $("#accuracyProgressGauge").setAttribute("aria-label", `문제 정답률 ${accuracy}%`);
+      $("#accuracyProgressGaugeText").textContent = `${accuracy}%`;
       $("#accuracyCaption").textContent = `${state.quizTotal}문제 중 ${state.quizCorrect}문제 정답`;
     } else {
-      $("#accuracyValue").textContent = "-";
-      $("#accuracyUnit").textContent = "";
+      $("#accuracyProgressGauge").style.setProperty("--progress", "0%");
+      $("#accuracyProgressGauge").setAttribute("aria-label", "문제 정답률 확인 전");
+      $("#accuracyProgressGaugeText").textContent = "-";
       $("#accuracyCaption").textContent = "문제 풀이 후 계산돼요.";
     }
 

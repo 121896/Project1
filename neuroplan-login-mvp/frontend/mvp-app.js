@@ -775,11 +775,9 @@
   async function openAdminPage({ verified = false } = {}) {
     if (!state.isAdmin) return;
     if (!verified) {
-      pendingSecureAction = () => openAdminPage({ verified: true });
-      $("#reauthForm").reset();
-      $("#reauthMessage").textContent = "관리자 페이지 접속을 위해 관리자 계정 비밀번호를 입력해 주세요.";
-      openModal("reauthModal");
-      return;
+      // 재인증 쿠키가 유효한 5분 동안은 비밀번호를 다시 묻지 않습니다.
+      // 쿠키가 만료됐거나 현재 세션과 다르면 requireReauth가 다시 입력창을 엽니다.
+      return requireReauth(() => openAdminPage({ verified: true }));
     }
     closeUserMenu();
     $("#userMenuButton").disabled = true;

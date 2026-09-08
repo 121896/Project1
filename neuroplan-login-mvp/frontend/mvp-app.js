@@ -19,7 +19,11 @@
     KUBERNETES: "컨테이너 오케스트레이션",
     DATABASE: "SQL과 데이터 모델링",
     CLOUD: "클라우드 인프라",
-    DEVOPS: "CI/CD와 자동화"
+    DEVOPS: "CI/CD와 자동화",
+    INFORMATION_PROCESSING_WRITTEN: "자격증 필기 기출",
+    INFORMATION_PROCESSING_PRACTICAL: "자격증 실기 기출",
+    LINUX_MASTER_2_FIRST: "리눅스마스터 2급 1차 기출",
+    LINUX_MASTER_2_SECOND: "리눅스마스터 2급 2차 기출"
   };
   const levelToApi = { "초급": "BEGINNER", "중급": "INTERMEDIATE", "고급": "ADVANCED" };
   const defaultState = {
@@ -309,6 +313,10 @@
 
   function subjectName(code) {
     return subjectByCode(code).name;
+  }
+
+  function isCertificationSubject(code) {
+    return /^(INFORMATION_PROCESSING_|LINUX_MASTER_2_)/.test(String(code || "").toUpperCase());
   }
 
   function hasCompleteProfile(profile = state) {
@@ -1627,7 +1635,7 @@
           aiQuizRunId = null;
         } else {
           questions = apiConfig.enabled
-            ? await apiRequest(`/learning/diagnosis/questions?subjectCode=${encodeURIComponent(code)}`)
+            ? await apiRequest(`/learning/diagnosis/questions?subjectCode=${encodeURIComponent(code)}${isCertificationSubject(code) ? "&random=true" : ""}`)
             : fallbackQuestions;
           aiQuizRunId = useAi ? 1 : null;
         }

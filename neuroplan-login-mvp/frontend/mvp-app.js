@@ -1576,6 +1576,8 @@
     else if (!tasksDone) $("#mainAction").textContent = "오늘 학습 이어하기";
     else if (!state.quizFinished) $("#mainAction").textContent = "확인 문제 풀기";
     else $("#mainAction").textContent = "오늘 학습 완료";
+    $("#profileAction").hidden = !hasProfile;
+    if (hasProfile) $("#profileAction").textContent = "학습 프로필 수정";
 
     renderDashboardDetails();
     renderSubjectTabs();

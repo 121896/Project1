@@ -1573,7 +1573,11 @@
     $("#heroProgressBar").style.width = `${progress}%`;
     $("#heroProgress").setAttribute("aria-valuenow", String(progress));
     $("#completedCount").textContent = String(completed);
-    $("#overallProgress").textContent = state.quizFinished ? "100" : String(progress);
+    const overallProgress = state.quizFinished ? 100 : progress;
+    $("#overallProgress").textContent = String(overallProgress);
+    $("#overallProgressGauge").style.setProperty("--progress", `${overallProgress}%`);
+    $("#overallProgressGauge").setAttribute("aria-label", `전체 진도율 ${overallProgress}%`);
+    $("#overallProgressGaugeText").textContent = `${overallProgress}%`;
     $("#overallCaption").textContent = state.quizFinished ? "오늘 학습이 대시보드에 반영됐어요." : completed ? "오늘 플랜을 진행하고 있어요." : "첫 학습을 시작하면 반영돼요.";
 
     if (state.quizFinished) {
@@ -1995,6 +1999,14 @@
       void element.offsetWidth;
       element.classList.add("subject-switching");
     });
+  }
+
+  function animateRoadmap() {
+    const roadmap = $("#timeline");
+    if (!roadmap || $("#planContent").hidden) return;
+    roadmap.classList.remove("roadmap-refresh");
+    void roadmap.offsetWidth;
+    roadmap.classList.add("roadmap-refresh");
   }
 
   function refreshWrongNotesWithMotion() {
@@ -2688,6 +2700,7 @@
           saveState();
         }
         updateUI();
+        animateRoadmap();
         toast(completed ? `${index + 1}단계 학습을 완료했어요.` : `${index + 1}단계 완료를 취소했어요.`);
       } catch (error) {
         toast(error.message);

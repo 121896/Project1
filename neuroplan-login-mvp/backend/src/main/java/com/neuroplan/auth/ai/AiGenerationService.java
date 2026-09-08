@@ -69,6 +69,8 @@ public class AiGenerationService {
                 + "Linux 명령어·경로·제품명처럼 고유한 기술 표기만 원문을 유지하세요. "
                 + "출력 키는 title, rationale, steps이며 steps는 정확히 3개입니다. "
                 + "각 단계는 stepNo, title, content를 포함하고 stepNo는 1, 2, 3입니다. "
+                + "3단계는 독립 목록이 아니라 1단계의 핵심 개념 이해 → 2단계의 적용 또는 실습 → 3단계의 점검 또는 복습으로 이어지는 학습 로드맵이어야 합니다. "
+                + "각 content의 첫 문장은 바로 이전 단계에서 얻은 내용을 다음 단계에서 어떻게 활용하는지 안내하세요. "
                 + planStyle.systemInstruction();
         String userPrompt = "%s %s 학습자를 위한 오늘의 3단계 학습 플랜을 한국어로 작성하세요. "
                 + "총 학습 시간은 약 %d분입니다. 설명 방식은 %s입니다. %s";

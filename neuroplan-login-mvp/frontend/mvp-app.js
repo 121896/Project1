@@ -2545,6 +2545,7 @@
     else if (step === 5) showPage("quiz");
     else toast("오늘 학습을 모두 완료했어요. 수고하셨습니다!");
   });
+  $("#subjectSettings").addEventListener("click", openProfile);
 
   $$(".timeline-item").forEach((item, index) => {
     $(".check-button", item).addEventListener("click", async () => {

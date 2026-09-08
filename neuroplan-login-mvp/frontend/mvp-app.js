@@ -483,6 +483,8 @@
   function playRefreshMotion() {
     const section = $(`[data-page-section="${activePage}"]`);
     if (!section) return;
+    // 페이지 진입용 좌우 모션이 남아 있으면 새로고침 상승 모션과 겹치므로 제거합니다.
+    section.classList.remove("page-swipe-enter-left", "page-swipe-enter-right");
     section.classList.remove("page-refresh-rise");
     void section.offsetWidth;
     section.classList.add("page-refresh-rise");

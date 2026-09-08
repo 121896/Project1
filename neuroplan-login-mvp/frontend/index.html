@@ -514,10 +514,11 @@
     .settings-form { display: grid; gap: 11px; }
     #adminSubjectForm { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 12px; }
     #adminSubjectForm .field, #adminQuestionForm .field { margin-bottom: 0; }
-    #adminSubjectForm .button { min-width: 120px; }
-    #adminQuestionForm { grid-template-columns: minmax(0, 1.1fr) minmax(0, .7fr) minmax(0, 1.5fr) minmax(0, 1.35fr); align-items: end; gap: 12px; }
-    #adminQuestionForm .field:nth-child(4), #adminQuestionForm .field:nth-child(5) { grid-column: span 2; }
-    #adminQuestionForm .admin-user-actions { grid-column: 1 / -1; }
+    #adminSubjectForm .button { min-width: 120px; height: 46px; min-height: 46px; align-self: end; }
+    #adminQuestionForm { grid-template-columns: 1fr; align-items: stretch; gap: 12px; }
+    #adminQuestionForm .field:nth-child(4), #adminQuestionForm .field:nth-child(5) { grid-column: auto; }
+    #adminQuestionForm .admin-user-actions { grid-column: 1; justify-content: flex-start; margin-top: 2px; }
+    #adminQuestionForm .admin-user-actions .button.primary { min-width: 150px; min-height: 46px; padding-inline: 24px; font-size: 13px; }
     #adminSubjectList { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #adminQuestionList { grid-template-columns: 1fr; }
     #adminQuestionList .history-item { min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 16px 17px; }
@@ -1011,8 +1012,8 @@
       .admin-question-card > #adminQuestionList { grid-row: auto; max-height: 300px; }
       #adminSubjectForm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       #adminSubjectForm .button { grid-column: 1 / -1; }
-      #adminQuestionForm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      #adminQuestionForm .field:nth-child(3), #adminQuestionForm .field:nth-child(4), #adminQuestionForm .field:nth-child(5) { grid-column: span 2; }
+      #adminQuestionForm { grid-template-columns: 1fr; }
+      #adminQuestionForm .field:nth-child(3), #adminQuestionForm .field:nth-child(4), #adminQuestionForm .field:nth-child(5) { grid-column: auto; }
       #adminSubjectList, #adminQuestionList { grid-template-columns: 1fr; }
     }
     body.dark-mode .modal-backdrop { background: rgba(0,0,0,.62); }

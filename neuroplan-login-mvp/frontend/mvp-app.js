@@ -343,6 +343,13 @@
     }[String(code || "").toUpperCase()] || "자격증";
   }
 
+  function subjectProfileLabel(code, level = state.subjectLevels?.[code], focus = state.subjectFocus?.[code]) {
+    const labels = [subjectName(code)];
+    if (!isCertificationSubject(code) && level) labels.push(level);
+    if (isPracticalCertification(code) && focus && focus !== "전체 범위") labels.push(focus);
+    return labels.join(" · ");
+  }
+
   function hasCompleteProfile(profile = state) {
     return profile.subjects.length > 0 && profile.subjects.every(code =>
       Boolean(profile.subjectLevels[code]) && (!isPracticalCertification(code) || Boolean(profile.subjectFocus?.[code]))
@@ -352,7 +359,7 @@
   function profileLabel(profile = state) {
     return profile.subjects.map(code => {
       const focus = profile.subjectFocus?.[code];
-      return `${subjectName(code)} · ${profile.subjectLevels[code]}${focus ? ` · ${focus}` : ""}`;
+      return subjectProfileLabel(code, profile.subjectLevels[code], focus);
     }).join(", ");
   }
 
@@ -1338,7 +1345,7 @@
   function renderSubjectTabs() {
     const tabs = state.subjects.map(code => `
       <button class="plan-subject-tab${state.activeSubjectCode === code ? " active" : ""}" type="button" data-plan-subject="${escapeHtml(code)}">
-        ${escapeHtml(subjectName(code))} · ${escapeHtml(state.subjectLevels[code])}
+        ${escapeHtml(subjectProfileLabel(code))}
       </button>`).join("");
     $("#planSubjectTabs").innerHTML = tabs || '<span class="metric-caption">학습 프로필에서 과목을 선택해 주세요.</span>';
     $("#quizSubjectTabs").innerHTML = state.subjects.map(code => `
@@ -1407,7 +1414,7 @@
       ? dashboard.subjectStats.map(item => {
           const rate = item.solvedCount ? Math.round((item.correctCount / item.solvedCount) * 100) : 0;
           const progress = item.totalSteps ? Math.round((item.completedSteps / item.totalSteps) * 100) : 0;
-          return `<div class="subject-stat-row"><div><strong>${escapeHtml(item.subjectName)} · ${escapeHtml(item.learningLevel || "")}</strong><div class="subject-stat-track"><span style="width:${progress}%"></span></div><span class="metric-caption">플랜 ${item.completedSteps}/${item.totalSteps}단계 · 문제 ${item.solvedCount}개 · 정답률 ${rate}%</span></div><em>${progress}%</em></div>`;
+          return `<div class="subject-stat-row"><div><strong>${escapeHtml(subjectProfileLabel(item.subjectCode, item.learningLevel))}</strong><div class="subject-stat-track"><span style="width:${progress}%"></span></div><span class="metric-caption">플랜 ${item.completedSteps}/${item.totalSteps}단계 · 문제 ${item.solvedCount}개 · 정답률 ${rate}%</span></div><em>${progress}%</em></div>`;
         }).join("")
       : '<span class="metric-caption">과목을 설정하면 과목별 진행률이 나타납니다.</span>';
   }
@@ -1490,7 +1497,7 @@
     const preference = state.ai.preferences || defaultState.ai.preferences;
     const styleLabels = { BRIEF: "간단히", DETAILED: "자세히", PRACTICAL: "실습 중심" };
     const profileHtml = hasCompleteProfile()
-      ? `<div class="plan-criteria-subjects">${state.subjects.map(code => `<span>${escapeHtml(subjectName(code))} · ${escapeHtml(state.subjectLevels[code])}</span>`).join("")}</div>`
+      ? `<div class="plan-criteria-subjects">${state.subjects.map(code => `<span>${escapeHtml(subjectProfileLabel(code))}</span>`).join("")}</div>`
       : `<strong>과목·수준 설정 전</strong>`;
     $("#planCriteriaList").innerHTML = `
       <li><span>과목·수준</span>${profileHtml}</li>
@@ -1539,7 +1546,7 @@
 
     $("#profileLevel").textContent = hasProfile ? "과목별 맞춤 수준" : "미설정";
     $("#subjectTags").innerHTML = hasProfile
-      ? state.subjects.map(code => `<span class="subject-tag">${escapeHtml(subjectName(code))} · ${escapeHtml(state.subjectLevels[code])}</span>`).join("")
+      ? state.subjects.map(code => `<span class="subject-tag">${escapeHtml(subjectProfileLabel(code))}</span>`).join("")
       : '<span class="subject-tag">과목을 선택해 주세요</span>';
     const currentWrongFilter = $("#wrongSubjectFilter").value;
     $("#wrongSubjectFilter").innerHTML = '<option value="">전체 과목</option>' + state.subjects.map(code => `<option value="${escapeHtml(code)}">${escapeHtml(subjectName(code))}</option>`).join("");
@@ -1553,8 +1560,8 @@
     $("#planContent").hidden = !state.planGenerated;
     if (state.planGenerated) {
       const focus = state.activeSubjectCode || state.subjects[0] || "KUBERNETES";
-      const focusLevel = state.subjectLevels[focus] || "초급";
-      $("#focusSubject").textContent = `${subjectName(focus)} · ${focusLevel}`;
+      const focusLabel = subjectProfileLabel(focus);
+      $("#focusSubject").textContent = focusLabel;
       const fallbackTitles = [`${subjectName(focus)} 핵심 개념 익히기`, `${subjectName(focus)} 미니 실습 따라하기`, `${subjectName(focus)} 핵심 내용 복습`];
       const fallbackContents = ["개념 카드와 예제로 준비하기", "단계별 미니 실습 수행하기", "오늘 배운 내용 한 번 더 확인하기"];
       ["One", "Two", "Three"].forEach((suffix, index) => {
@@ -1562,14 +1569,14 @@
         $(`#task${suffix}Title`).textContent = planStep?.title || fallbackTitles[index];
         $(`#task${suffix}Content`).innerHTML = planStepContentHtml(planStep?.content || fallbackContents[index]);
       });
-      $("#planBasis").textContent = state.ai.planRationale?.[focus] || `${subjectName(focus)} · ${focusLevel} 설정 기준`;
+      $("#planBasis").textContent = state.ai.planRationale?.[focus] || `${focusLabel} 설정 기준`;
       $("#planStatus").textContent = state.quizFinished ? "학습 완료" : completed ? "학습 중" : "플랜 준비됨";
       $("#planNote").textContent = state.quizFinished
         ? "오늘의 학습 결과가 대시보드에 반영되었습니다."
         : completed === 3 ? "학습을 모두 마쳤어요. 확인 문제에 도전해 보세요." : `3단계 중 ${completed}단계를 완료했습니다.`;
     } else {
       const focus = state.activeSubjectCode || state.subjects[0];
-      $("#focusSubject").textContent = hasProfile ? `${subjectName(focus)} · ${state.subjectLevels[focus]}` : "과목을 먼저 선택해 주세요";
+      $("#focusSubject").textContent = hasProfile ? subjectProfileLabel(focus) : "과목을 먼저 선택해 주세요";
       $("#planStatus").textContent = hasProfile ? "생성 대기" : "설정 전";
       $("#planNote").textContent = hasProfile ? "오늘의 플랜 생성 버튼을 눌러 학습을 시작하세요." : "회원가입 후 학습 프로필을 설정하면 맞춤 플랜을 생성할 수 있어요.";
     }
@@ -1913,6 +1920,10 @@
     answerChecked = false;
     $("#quizWorkspace").hidden = false;
     renderQuestion();
+    const workspace = $("#quizWorkspace");
+    workspace.classList.remove("subject-switching");
+    void workspace.offsetWidth;
+    workspace.classList.add("subject-switching");
   }
 
   document.addEventListener("click", event => {

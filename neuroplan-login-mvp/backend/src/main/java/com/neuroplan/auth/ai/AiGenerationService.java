@@ -221,6 +221,7 @@ public class AiGenerationService {
                 + "출력 키는 questions이며 정확히 " + count + "개입니다. "
                 + "각 문제는 questionNo, text, difficulty, explanation, options, correctOptionNo를 포함합니다. "
                 + "options는 optionNo와 text를 가진 정확히 4개 보기이며 correctOptionNo는 1에서 4 사이입니다. "
+                + "문제 본문에 프로그래밍 코드·SQL·명령어 블록이 필요하면 반드시 ```언어명 줄바꿈 코드 ``` 형식의 fenced code block으로 작성하세요. "
                 + "문제는 100자, 보기는 60자, 해설은 180자 이내로 간결하게 작성하세요.";
         String userPrompt = ("%s %s 학습자를 위한 서로 중복되지 않는 확인 문제 %d개를 한국어로 작성하세요. "
                 + "암기만 묻지 말고 실제 상황 판단과 개념 이해를 고르게 확인하세요.")
@@ -273,7 +274,8 @@ public class AiGenerationService {
                 + "출처의 기출 문항·정답·해설을 복사하거나 단순 변형하지 말고, 출제 영역과 난이도만 참고한 독립적인 새 문제를 만드세요. "
                 + "각 문제는 짧고 명확한 답을 요구해야 하며, 모호한 표현이나 여러 해석이 가능한 질문을 피하세요. "
                 + "출력 키는 questions이며 정확히 " + count + "개입니다. 각 문제는 questionNo, text, difficulty, explanation, "
-                + "referenceAnswer, acceptedAnswers, gradingRubric을 포함합니다. 문제·모범 답안·해설은 한국어로 작성하세요.";
+                + "referenceAnswer, acceptedAnswers, gradingRubric을 포함합니다. 문제·모범 답안·해설은 한국어로 작성하세요. "
+                + "문제 본문에 프로그래밍 코드·SQL·명령어 블록이 필요하면 반드시 ```언어명 줄바꿈 코드 ``` 형식의 fenced code block으로 작성하세요.";
         String userPrompt = ("%s %s 학습자를 위한 서로 중복되지 않는 단답형 확인 문제 %d개를 작성하세요. "
                 + "SQL, 프로그래밍, 운영체제, 네트워크, 보안 중 설정된 시험 영역과 실제 문제 해결 능력을 고르게 확인하세요.")
                 .formatted(subjectName, levelLabel, count)

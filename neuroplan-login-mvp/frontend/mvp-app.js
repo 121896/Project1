@@ -350,6 +350,26 @@
     return labels.join(" · ");
   }
 
+  function questionTextHtml(text) {
+    const source = String(text ?? "").replace(/\r/g, "").trim();
+    if (!source) return "";
+    const codeFence = /```(?:([a-z0-9_+.-]+)[ \t]*\n)?([\s\S]*?)```/gi;
+    const fragments = [];
+    let cursor = 0;
+    let match;
+    const prose = value => value.trim()
+      ? `<p>${escapeHtml(value.trim()).replace(/\n/g, "<br>")}</p>`
+      : "";
+    while ((match = codeFence.exec(source))) {
+      fragments.push(prose(source.slice(cursor, match.index)));
+      const language = match[1] ? `<span class="question-code-language">${escapeHtml(match[1])}</span>` : "";
+      fragments.push(`<div class="question-code-block">${language}<pre><code>${escapeHtml(match[2].trim())}</code></pre></div>`);
+      cursor = match.index + match[0].length;
+    }
+    fragments.push(prose(source.slice(cursor)));
+    return fragments.join("") || prose(source);
+  }
+
   function hasCompleteProfile(profile = state) {
     return profile.subjects.length > 0 && profile.subjects.every(code =>
       Boolean(profile.subjectLevels[code]) && (!isPracticalCertification(code) || Boolean(profile.subjectFocus?.[code]))
@@ -1363,9 +1383,32 @@
           const expanded = planHistoryDetails.has(item.id);
           const detail = planHistoryDetails.get(item.id);
           return `
-          <article class="history-item"><div><strong>${escapeHtml(item.subjectName)} · ${escapeHtml(item.title)}</strong><p>${escapeHtml(item.planDate)} · ${escapeHtml(item.status)}</p>${expanded ? `<div class="plan-history-detail" data-plan-detail-panel><ol class="plan-step-actions">${detail.steps.map(step => `<li><strong>${escapeHtml(step.title)}</strong> — ${escapeHtml(step.content)}</li>`).join("")}</ol></div>` : ""}</div><div class="admin-user-actions"><span class="today-tag">${item.completedSteps}/${item.totalSteps}단계</span><button class="button secondary small" type="button" data-plan-detail="${item.id}">${expanded ? "접기" : "상세 정보"}</button><button class="button secondary small" type="button" data-plan-select="${item.id}">이 플랜 사용</button></div></article>`;
+          <article class="history-item"><div><strong>${escapeHtml(item.subjectName)} · ${escapeHtml(item.title)}</strong><p>${escapeHtml(item.planDate)} · ${escapeHtml(item.status)}</p>${expanded ? `<div class="plan-history-detail" data-plan-detail-panel="${item.id}"><ol class="plan-step-actions">${detail.steps.map(step => `<li><strong>${escapeHtml(step.title)}</strong> — ${escapeHtml(step.content)}</li>`).join("")}</ol></div>` : ""}</div><div class="admin-user-actions"><span class="today-tag">${item.completedSteps}/${item.totalSteps}단계</span><button class="button secondary small" type="button" data-plan-detail="${item.id}">${expanded ? "접기" : "상세 정보"}</button><button class="button secondary small" type="button" data-plan-select="${item.id}">이 플랜 사용</button></div></article>`;
         }).join("")
       : '<div class="empty-state"><div><strong>아직 학습 기록이 없습니다.</strong><span>플랜을 생성하면 날짜별 기록이 표시됩니다.</span></div></div>';
+  }
+
+  function animatePlanHistoryDetailOpen(planId) {
+    const panel = $("#planHistoryList")?.querySelector(`[data-plan-detail-panel="${planId}"]`);
+    if (!panel) return;
+    panel.style.height = "0px";
+    panel.style.opacity = "0";
+    panel.style.transform = "translateY(-4px)";
+    panel.classList.add("is-opening");
+    void panel.offsetHeight;
+    window.requestAnimationFrame(() => {
+      panel.style.height = `${panel.scrollHeight}px`;
+      panel.style.opacity = "1";
+      panel.style.transform = "translateY(0)";
+    });
+    window.setTimeout(() => {
+      if (!panel.classList.contains("is-collapsing")) {
+        panel.classList.remove("is-opening");
+        panel.style.height = "";
+        panel.style.opacity = "";
+        panel.style.transform = "";
+      }
+    }, 440);
   }
 
   function currentStep() {
@@ -1751,6 +1794,9 @@
             method: "POST",
             body: JSON.stringify({ additionalPrompt, questionType: useShortAnswer ? "SHORT_ANSWER" : "MULTIPLE_CHOICE" })
           });
+          if (useShortAnswer && (!(generated.questions || []).length || !(generated.questions || []).every(question => question.questionType === "SHORT_ANSWER"))) {
+            throw new Error("주관식 생성 요청이 객관식으로 처리되었습니다. 최신 백엔드 배포 후 다시 시도해 주세요.");
+          }
           questions = generated.questions.map(question => ({
             ...question,
             // AI 문제도 서버에서 문제은행 형식으로 저장한 실제 ID를 사용한다.
@@ -1762,14 +1808,6 @@
             }))
           }));
           aiQuizRunId = generated.generationRunId;
-          quizSetsBySubject.set(code, {
-            mode,
-            runId: aiQuizRunId,
-            questions: questions.map(question => ({
-              ...question,
-              options: question.options.map(option => ({ ...option }))
-            }))
-          });
           updateAiQuota(generated.quota);
           if (generated.fallback) {
             toast("AI 응답을 검증하지 못해 기본 문제를 준비했습니다.", {
@@ -1793,6 +1831,7 @@
         quizScore = 0;
         chosenAnswer = null;
         answerChecked = false;
+        storeQuizSet(code);
         await showPage("quiz");
         $("#quizWorkspace").hidden = false;
         renderQuestion();
@@ -1817,7 +1856,7 @@
     $("#questionCounter").textContent = `${quizIndex + 1} / ${questions.length}`;
     $("#quizProgressBar").style.width = `${((quizIndex + 1) / questions.length) * 100}%`;
     $("#questionSubject").textContent = `${question.subjectName} · ${question.difficulty}`;
-    $("#questionText").textContent = question.text;
+    $("#questionText").innerHTML = questionTextHtml(question.text);
     $("#reportQuestionButton").dataset.questionId = String(question.id);
     $("#quizSubjectText").textContent = shortAnswer
       ? `${subjectName(state.quizSubjectCode || state.subjects[0])} 단답형 답안을 AI가 검토합니다.`
@@ -1913,9 +1952,9 @@
     }));
     quizMode = cached.mode;
     aiQuizRunId = cached.runId;
-    quizAnswers = [];
-    quizIndex = 0;
-    quizScore = 0;
+    quizAnswers = (cached.answers || []).map(answer => ({ ...answer }));
+    quizIndex = Math.min(Number(cached.quizIndex || 0), Math.max(questions.length - 1, 0));
+    quizScore = Number(cached.quizScore || 0);
     chosenAnswer = null;
     answerChecked = false;
     $("#quizWorkspace").hidden = false;
@@ -1926,6 +1965,34 @@
     workspace.classList.add("subject-switching");
   }
 
+  function storeQuizSet(code) {
+    if (!code || !questions.length) return;
+    quizSetsBySubject.set(code, {
+      mode: quizMode,
+      runId: aiQuizRunId,
+      quizIndex,
+      quizScore,
+      answers: quizAnswers.map(answer => ({ ...answer })),
+      questions: questions.map(question => ({
+        ...question,
+        options: (question.options || []).map(option => ({ ...option }))
+      }))
+    });
+  }
+
+  function animateSubjectPanels(...elements) {
+    elements.filter(element => element && !element.hidden).forEach(element => {
+      element.classList.remove("subject-switching");
+      void element.offsetWidth;
+      element.classList.add("subject-switching");
+    });
+  }
+
+  function refreshWrongNotesWithMotion() {
+    renderWrongNotes();
+    animateSubjectPanels($("#wrongNoteList"));
+  }
+
   document.addEventListener("click", event => {
     const pageButton = event.target.closest("[data-page]");
     if (pageButton) showPage(pageButton.dataset.page);
@@ -1934,13 +2001,16 @@
     if (planSubject) {
       selectActivePlan(planSubject.dataset.planSubject);
       updateUI();
+      animateSubjectPanels($("#planContent"), $("#planEmpty"));
     }
 
     const quizSubject = event.target.closest("[data-quiz-subject]");
     if (quizSubject) {
+      storeQuizSet(state.quizSubjectCode);
       state.quizSubjectCode = quizSubject.dataset.quizSubject;
       restoreQuizSetForSubject(state.quizSubjectCode);
       updateUI();
+      animateSubjectPanels($("#quizLaunchPanel"), $("#quizWorkspace"));
     }
 
     const close = event.target.closest("[data-close]");
@@ -2298,9 +2368,9 @@
     } catch (error) { toast(error.message); }
   });
   $("#adminQuestionCancel").addEventListener("click", resetAdminQuestionForm);
-  $("#wrongSubjectFilter").addEventListener("change", renderWrongNotes);
-  $("#wrongStatusFilter").addEventListener("change", renderWrongNotes);
-  $("#wrongCountFilter").addEventListener("change", renderWrongNotes);
+  $("#wrongSubjectFilter").addEventListener("change", refreshWrongNotesWithMotion);
+  $("#wrongStatusFilter").addEventListener("change", refreshWrongNotesWithMotion);
+  $("#wrongCountFilter").addEventListener("change", refreshWrongNotesWithMotion);
   $("#wrongRetryButton").addEventListener("click", () => startQuiz("WRONG"));
   $("#planHistoryList").addEventListener("click", async event => {
     const detail = event.target.closest("[data-plan-detail]");
@@ -2336,6 +2406,7 @@
         const plan = apiConfig.enabled ? await apiRequest(`/learning/plans/${planId}`) : null;
         if (plan) planHistoryDetails.set(planId, plan);
         renderPlanHistory();
+        window.requestAnimationFrame(() => animatePlanHistoryDetailOpen(planId));
       } else if (select) {
         if (apiConfig.enabled) await apiRequest(`/learning/plans/${planId}/select`, { method: "PUT" });
         await loadLearningState();

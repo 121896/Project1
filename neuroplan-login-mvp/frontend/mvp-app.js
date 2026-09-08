@@ -1134,14 +1134,16 @@
   }
 
   async function loadLearningState() {
-    const [subjects, learning, dashboard, wrongNotes, notifications] = await Promise.all([
-      apiRequest("/learning/subjects"),
+    const subjects = await apiRequest("/learning/subjects");
+    subjectCatalog = subjects;
+    renderSubjectChoices();
+
+    const [learning, dashboard, wrongNotes, notifications] = await Promise.all([
       apiRequest("/learning/state"),
       apiRequest("/learning/dashboard?days=28"),
       apiRequest("/learning/wrong-notes"),
       apiRequest("/notifications")
     ]);
-    subjectCatalog = subjects;
     applyProfile(learning.profile);
     applyPlans(learning.plans || (learning.plan ? [learning.plan] : []));
     state.stats = learning.stats || { solvedCount: 0, correctCount: 0, completedStepCount: 0 };

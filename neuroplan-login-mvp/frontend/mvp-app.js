@@ -149,6 +149,7 @@
   let accountDirty = false;
   const routedPages = new Set(["dashboard", "plan", "quiz", "wrong", "history"]);
   const requestedPage = window.location.hash.replace(/^#/, "");
+  const requestedAdmin = requestedPage === "admin";
   let activePage = routedPages.has(requestedPage) ? requestedPage : "dashboard";
   let reauthExpiresAt = 0;
   let pendingSecureAction = null;
@@ -749,6 +750,8 @@
     $("#userMenuButton").disabled = true;
     try {
       await loadAdminOverview();
+      activePage = "admin";
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#admin`);
       $("#dashboard").hidden = true;
       $("#categoryNav").hidden = true;
       $("#adminPage").hidden = false;
@@ -1065,14 +1068,17 @@
     buttons.forEach(button => { button.disabled = true; });
     await showRefreshLoading();
     try {
-      if (activePage === "account") {
+      if (activePage === "admin") {
+        await loadAdminOverview();
+        playAdminMotion();
+      } else if (activePage === "account") {
         await loadAccountDetails();
       } else {
         await loadLearningState();
       if (activePage === "history") await loadPlanHistory({ throwOnError: true });
       }
       updateUI();
-      playRefreshMotion();
+      if (activePage !== "admin") playRefreshMotion();
       toast("현재 페이지를 최신 데이터로 새로고침했습니다.");
     } catch (error) {
       toast(`새로고침하지 못했습니다: ${error.message}`);
@@ -1088,7 +1094,8 @@
       await detectAdmin();
       renderSubjectChoices();
       updateUI();
-      await showPage(state.authenticated ? activePage : "dashboard", { updateLocation: false, scroll: false });
+      if (state.authenticated && requestedAdmin && state.isAdmin) await openAdminPage();
+      else await showPage(state.authenticated ? activePage : "dashboard", { updateLocation: false, scroll: false });
       return;
     }
     let payload;
@@ -1120,7 +1127,8 @@
       console.warn("관리자 권한을 확인하지 못했습니다.", error);
     }
     updateUI();
-    await showPage(activePage, { updateLocation: false, scroll: false });
+    if (requestedAdmin && state.isAdmin) await openAdminPage();
+    else await showPage(activePage, { updateLocation: false, scroll: false });
   }
 
   function renderSubjectChoices() {
@@ -1966,20 +1974,6 @@
     }
   });
   $("#adminBackButton").addEventListener("click", showLearningPage);
-  $("#adminRefresh").addEventListener("click", async () => {
-    const button = $("#adminRefresh");
-    button.disabled = true;
-    await showRefreshLoading();
-    try {
-      await loadAdminOverview();
-      toast("관리자 데이터를 새로고침했습니다.");
-    } catch (error) {
-      toast(error.message);
-    } finally {
-      setAiLoading(false);
-      button.disabled = false;
-    }
-  });
   $("#adminUserSearchForm").addEventListener("submit", async event => {
     event.preventDefault();
     adminPageIndex = 0;

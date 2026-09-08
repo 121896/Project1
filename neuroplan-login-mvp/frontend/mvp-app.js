@@ -2302,11 +2302,20 @@
           const panel = detail.closest(".history-item")?.querySelector("[data-plan-detail-panel]");
           if (panel) {
             detail.disabled = true;
+            panel.style.height = `${panel.scrollHeight}px`;
+            panel.style.opacity = "1";
+            panel.style.transform = "translateY(0)";
+            void panel.offsetHeight;
             panel.classList.add("is-collapsing");
+            window.requestAnimationFrame(() => {
+              panel.style.height = "0px";
+              panel.style.opacity = "0";
+              panel.style.transform = "translateY(-4px)";
+            });
             window.setTimeout(() => {
               planHistoryDetails.delete(planId);
               renderPlanHistory();
-            }, 260);
+            }, 440);
           } else {
             planHistoryDetails.delete(planId);
             renderPlanHistory();

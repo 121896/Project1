@@ -629,15 +629,12 @@
       animation: plan-history-detail-open .34s cubic-bezier(.22,.8,.26,1) both;
     }
     .plan-history-detail.is-collapsing {
-      animation: plan-history-detail-close .26s cubic-bezier(.55,.1,.7,.35) both;
+      animation: none;
+      transition: height .42s cubic-bezier(.22,.72,.28,1), opacity .24s ease-out, transform .42s cubic-bezier(.22,.72,.28,1);
     }
     @keyframes plan-history-detail-open {
       from { max-height: 0; opacity: 0; transform: translateY(-8px); }
       to { max-height: 720px; opacity: 1; transform: translateY(0); }
-    }
-    @keyframes plan-history-detail-close {
-      from { max-height: 720px; opacity: 1; transform: translateY(0); }
-      to { max-height: 0; opacity: 0; transform: translateY(-8px); }
     }
     .check-button {
       width: 34px;

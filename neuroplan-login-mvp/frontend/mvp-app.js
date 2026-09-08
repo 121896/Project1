@@ -1252,19 +1252,6 @@
       $("#subjectChoices").innerHTML = '<div class="subject-level-empty">활성 과목이 없습니다. DB의 subjects 데이터를 확인해 주세요.</div>';
       return;
     }
-    const levelDescriptions = { "초급": "개념부터", "중급": "실습 중심", "고급": "설계 중심" };
-    const generalChoiceMarkup = subject => `
-      <div class="subject-level-choice-row">
-        <button class="choice subject-choice-label${draftSubjects.includes(subject.code) ? " selected" : ""}" type="button" data-subject="${escapeHtml(subject.code)}">
-          <strong>${escapeHtml(subject.name)}</strong><span>${escapeHtml(subjectDescriptions[subject.code] || "맞춤 학습")}</span>
-        </button>
-        <div class="subject-level-choice-buttons" aria-label="${escapeHtml(subject.name)} 수준 선택">
-          ${["초급", "중급", "고급"].map(level => `
-            <button class="level-choice${draftSubjectLevels[subject.code] === level ? " selected" : ""}" type="button" data-level-subject="${escapeHtml(subject.code)}" data-level="${level}">
-              <strong>${level}</strong><span>${levelDescriptions[level]}</span>
-            </button>`).join("")}
-        </div>
-      </div>`;
     const choiceMarkup = subject => `
       <button class="choice${draftSubjects.includes(subject.code) ? " selected" : ""}" type="button" data-subject="${escapeHtml(subject.code)}">
         <strong>${escapeHtml(subject.name)}</strong><span>${escapeHtml(subjectDescriptions[subject.code] || "맞춤 학습")}</span>
@@ -1288,7 +1275,7 @@
     const generalMarkup = generalSubjects.length
       ? `<section class="subject-choice-section" aria-labelledby="generalSubjectTitle">
           <h4 class="subject-choice-section-title" id="generalSubjectTitle">일반 과목</h4>
-          <div class="subject-level-choice-list">${generalSubjects.map(generalChoiceMarkup).join("")}</div>
+          <div class="choice-grid">${generalSubjects.map(choiceMarkup).join("")}</div>
         </section>`
       : "";
     const certificationMarkup = orderedGroups.length
@@ -1309,18 +1296,23 @@
   }
 
   function renderSubjectLevelSettings() {
-    const practicalSubjects = draftSubjects.filter(isPracticalCertification);
-    if (!practicalSubjects.length) {
-      $("#subjectLevelSettings").innerHTML = "";
+    if (!draftSubjects.length) {
+      $("#subjectLevelSettings").innerHTML = '<div class="subject-level-empty">과목을 선택하면 과목별 수준 설정이 나타납니다.</div>';
       return;
     }
+    const descriptions = { "초급": "개념부터", "중급": "실습 중심", "고급": "설계 중심" };
     const practicalTopics = ["전체 범위", "프로그래밍", "SQL", "운영체제", "네트워크", "보안"];
-    $("#subjectLevelSettings").innerHTML = practicalSubjects.map(code => `
+    $("#subjectLevelSettings").innerHTML = draftSubjects.map(code => `
       <section class="subject-level-row" aria-label="${escapeHtml(subjectName(code))} ${isPracticalCertification(code) ? "시험 영역" : isCertificationSubject(code) ? "시험 단계" : "수준"} 설정">
         <div class="subject-level-head"><strong>${escapeHtml(subjectName(code))}</strong><span>${isCertificationSubject(code) ? (isPracticalCertification(code) ? `${escapeHtml(draftSubjectFocus[code] || "전체 범위")} 선택됨` : "시험 과목은 난이도를 선택하지 않습니다") : (draftSubjectLevels[code] ? `${draftSubjectLevels[code]} 선택됨` : "수준을 선택해 주세요")}</span></div>
-        <div class="subject-level-buttons focus-topic-buttons">
+        ${isPracticalCertification(code) ? `<div class="subject-level-buttons focus-topic-buttons">
           ${practicalTopics.map(topic => `<button class="level-choice${(draftSubjectFocus[code] || "전체 범위") === topic ? " selected" : ""}" type="button" data-focus-subject="${escapeHtml(code)}" data-focus-topic="${escapeHtml(topic)}"><strong>${escapeHtml(topic)}</strong><span>${topic === "전체 범위" ? "모든 출제 영역" : "선택 영역 집중"}</span></button>`).join("")}
-        </div>
+        </div>` : isCertificationSubject(code) ? `<div class="certification-fixed-level">시험 단계 기준으로 출제합니다.</div>` : `<div class="subject-level-buttons">
+          ${["초급", "중급", "고급"].map(level => `
+            <button class="level-choice${draftSubjectLevels[code] === level ? " selected" : ""}" type="button" data-level-subject="${escapeHtml(code)}" data-level="${level}">
+              <strong>${level}</strong><span>${descriptions[level]}</span>
+            </button>`).join("")}
+        </div>`}
       </section>`).join("");
   }
 
@@ -1577,7 +1569,7 @@
       : "플랜 체크 여부와 관계없이 기존 문제은행 5문제 또는 AI가 새로 만든 5문제를 풀 수 있습니다.";
 
     if (!state.authenticated) $("#mainAction").textContent = "회원가입하고 시작하기";
-    else if (!hasProfile) $("#mainAction").textContent = "과목·수준 설정하기";
+    else if (!hasProfile) $("#mainAction").textContent = "학습 프로필 설정하기";
     else if (!state.planGenerated) $("#mainAction").textContent = "오늘의 플랜 생성하기";
     else if (!tasksDone) $("#mainAction").textContent = "오늘 학습 이어하기";
     else if (!state.quizFinished) $("#mainAction").textContent = "확인 문제 풀기";
@@ -1937,17 +1929,7 @@
 
     const level = event.target.closest("[data-level-subject]");
     if (level) {
-      const code = level.dataset.levelSubject;
-      if (!draftSubjects.includes(code)) {
-        if (draftSubjects.length >= 3) {
-          $("#profileMessage").textContent = "학습 과목은 최대 3개까지 선택할 수 있습니다.";
-          return;
-        }
-        draftSubjects.push(code);
-      }
-      draftSubjectLevels[code] = level.dataset.level;
-      $("#profileMessage").textContent = "";
-      renderSubjectChoices();
+      draftSubjectLevels[level.dataset.levelSubject] = level.dataset.level;
       renderSubjectLevelSettings();
     }
 

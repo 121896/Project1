@@ -16,4 +16,4 @@ images:
     newTag: "434d748"
 
   - name: harbor.nplan.local:80/neuroplan/backend
-    newTag: "434d748"
+    newTag: "7cdea00"

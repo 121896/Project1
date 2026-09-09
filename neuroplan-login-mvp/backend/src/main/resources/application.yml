@@ -76,3 +76,5 @@ logging:
   level:
     root: INFO
     com.neuroplan.auth: INFO
+
+# deployment-safety readiness failure test

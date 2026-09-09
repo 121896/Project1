@@ -648,7 +648,9 @@
     });
     $$('[data-page]').forEach(button => button.classList.toggle("active", button.dataset.page === page));
     if (page === "history") await loadPlanHistory();
-    if (page === "wrong") await loadWrongNotes();
+    // 다른 페이지에서 오답 노트로 이동할 때는 항상 서버의 최신 목록을 다시 받습니다.
+    // 브라우저 상태만 재사용하면 직전에 틀린 문제가 보이지 않을 수 있습니다.
+    if (page === "wrong") await loadWrongNotes({ forceRefresh: previousPage !== "wrong" });
     if (page === "account") updateReauthStatus();
     if (updateLocation && routedPages.has(page)) {
       window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${page}`);
@@ -1226,12 +1228,14 @@
     }
   }
 
-  async function loadWrongNotes() {
+  async function loadWrongNotes({ forceRefresh = false } = {}) {
     if (!state.authenticated) return;
     state.wrongNotes = apiConfig.enabled
-      ? ((await apiRequest("/learning/wrong-notes")) || [])
+      ? ((await apiRequest(`/learning/wrong-notes${forceRefresh ? `?refresh=${Date.now()}` : ""}`)) || [])
       : state.wrongNotes;
+    state.dashboard.unresolvedWrongNotes = state.wrongNotes.filter(note => !note.relearned).length;
     renderWrongNotes();
+    renderNotifications();
   }
 
   async function refreshCurrentPage() {
@@ -1827,7 +1831,7 @@
           if (useShortAnswer && (!(generated.questions || []).length || !(generated.questions || []).every(question => question.questionType === "SHORT_ANSWER"))) {
             throw new Error("주관식 생성 요청이 객관식으로 처리되었습니다. 최신 백엔드 배포 후 다시 시도해 주세요.");
           }
-          questions = generated.questions.map(question => ({
+          questions = ensureUniqueQuizQuestions(generated.questions).map(question => ({
             ...question,
             // AI 문제도 서버에서 문제은행 형식으로 저장한 실제 ID를 사용한다.
             id: question.id,
@@ -1846,7 +1850,7 @@
           }
           addNotification("AI 문제 생성 완료", `${subjectName(code)} ${useShortAnswer ? "주관식" : "객관식"} 문제 5개가 준비되었습니다.`, "quiz");
         } else if (useWrongNotes && apiConfig.enabled) {
-          questions = await apiRequest(`/learning/wrong-notes/questions?subjectCode=${encodeURIComponent(code)}`);
+          questions = ensureUniqueQuizQuestions(await apiRequest(`/learning/wrong-notes/questions?subjectCode=${encodeURIComponent(code)}`));
           if (!questions.length) throw new Error("이 과목에는 다시 풀 미해결 오답이 없습니다.");
           aiQuizRunId = null;
         } else {
@@ -1855,6 +1859,7 @@
             : fallbackQuestions;
           aiQuizRunId = useAi ? 1 : null;
         }
+        questions = ensureUniqueQuizQuestions(questions);
         questions = questions.map(question => ({ ...question, _quizSubjectCode: code }));
         quizMode = useShortAnswer ? "AI_SHORT" : useAi ? "AI" : useWrongNotes ? "WRONG" : "BANK";
         quizAnswers = [];
@@ -1914,6 +1919,24 @@
       shortAnswerText = event.target.value;
       $("#nextQuestion").disabled = !shortAnswerText.trim();
     });
+  }
+
+  function ensureUniqueQuizQuestions(items) {
+    const questionIds = new Set();
+    const questionTexts = new Set();
+    const unique = [];
+    for (const question of Array.isArray(items) ? items : []) {
+      const id = String(question?.id ?? "").trim();
+      const text = String(question?.text ?? "").replace(/\s+/g, " ").trim().toLocaleLowerCase("ko-KR");
+      if (!id || !text || questionIds.has(id) || questionTexts.has(text)) continue;
+      questionIds.add(id);
+      questionTexts.add(text);
+      unique.push(question);
+    }
+    if (unique.length !== (items || []).length) {
+      throw new Error("중복된 문제가 감지되어 문제 세트를 열지 않았습니다. 다시 생성해 주세요.");
+    }
+    return unique;
   }
 
   function addNotification(title, message, page = "dashboard", { type = "GENERAL", sourceKey = null } = {}) {
@@ -2761,17 +2784,20 @@
           $("#explanation").hidden = false;
           $("#nextQuestion").textContent = quizIndex === questions.length - 1 ? "결과 확인" : "다음 문제";
           updateAiQuota(checked.quota);
-          // 주관식 오답은 채점 직후 다시 불러와 오답 노트에 즉시 반영합니다.
-          if (!checked.correct) await loadWrongNotes();
+          // 주관식 오답은 채점 직후 저장·조회해, 문제 풀이 중에도 바로 확인할 수 있습니다.
+          if (!checked.correct) {
+            await loadWrongNotes({ forceRefresh: true });
+            toast("오답 노트에 바로 저장했습니다.", {
+              actionLabel: "오답 노트 보기", onAction: () => showPage("wrong")
+            });
+          }
           return;
         }
         const selectedOption = question.options.find(option => option.id === chosenAnswer);
         const checked = apiConfig.enabled
-          ? await apiRequest(quizMode === "AI" ? `/ai/questions/${aiQuizRunId}/check` : "/learning/diagnosis/check", {
+          ? await apiRequest("/learning/diagnosis/check", {
               method: "POST",
-              body: JSON.stringify(quizMode === "AI"
-                ? { questionNo: question.questionNo, selectedOptionNo: selectedOption?.optionNo }
-                : { questionId: question.id, selectedOptionId: chosenAnswer })
+              body: JSON.stringify({ questionId: question.id, selectedOptionId: chosenAnswer })
             })
           : {
               correct: chosenAnswer === question.correctOptionId,
@@ -2786,14 +2812,18 @@
           const optionId = Number(button.dataset.answer);
           button.classList.remove("selected");
           const option = question.options.find(item => item.id === optionId);
-          if ((quizMode === "AI"
-            ? (option?.optionNo === checked.correctOptionNo || optionId === checked.correctOptionNo)
-            : optionId === checked.correctOptionId)) button.classList.add("correct");
+          if (optionId === checked.correctOptionId || option?.optionNo === checked.correctOptionNo) button.classList.add("correct");
           else if (optionId === chosenAnswer) button.classList.add("wrong");
         });
         $("#explanation").textContent = `${checked.correct ? "정답입니다. " : "아쉽지만 오답입니다. "}${checked.explanation}`;
         $("#explanation").hidden = false;
         $("#nextQuestion").textContent = quizIndex === questions.length - 1 ? "결과 확인" : "다음 문제";
+        if (!checked.correct) {
+          await loadWrongNotes({ forceRefresh: true });
+          toast("오답 노트에 바로 저장했습니다.", {
+            actionLabel: "오답 노트 보기", onAction: () => showPage("wrong")
+          });
+        }
       } catch (error) {
         toast(error.message);
       } finally {
@@ -2810,22 +2840,15 @@
 
     $("#nextQuestion").disabled = true;
     try {
-      if (quizMode === "AI_SHORT" || quizAnswers.some(answer => answer.answerText)) {
-        state.quizCorrect = quizScore;
-        state.quizTotal = questions.length;
+      if (apiConfig.enabled) {
+        const completedQuizCorrect = quizScore;
+        const completedQuizTotal = questions.length;
         await loadLearningState();
+        // loadLearningState는 대시보드의 누적 값도 함께 갱신한다. 완료 직후에는
+        // 방금 푼 세트의 점수를 다시 적용해야 결과 카드가 마지막 한 문제 점수로 바뀌지 않는다.
+        state.quizCorrect = completedQuizCorrect;
+        state.quizTotal = completedQuizTotal;
         state.quizFinished = true;
-      } else if (apiConfig.enabled) {
-        const result = await apiRequest("/learning/diagnosis/attempts", {
-          method: "POST", body: JSON.stringify({
-            subjectCode: state.quizSubjectCode || state.subjects[0],
-            attemptType: quizMode === "WRONG" ? "RELEARN" : "DIAGNOSTIC",
-            answers: quizAnswers
-          })
-        });
-        state.quizCorrect = result.correctAnswers;
-        state.quizTotal = result.totalQuestions;
-        await loadLearningState();
       } else {
         state.quizCorrect = quizScore;
         state.quizTotal = questions.length;

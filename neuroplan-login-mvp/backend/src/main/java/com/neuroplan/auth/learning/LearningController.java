@@ -368,6 +368,8 @@ public class LearningController {
                  WHERE s.code = ?
                    AND s.is_active = TRUE
                    AND q.is_active = TRUE
+                   AND (LENGTH(q.question_text) - LENGTH(REPLACE(q.question_text, '?', ''))
+                      + LENGTH(q.question_text) - LENGTH(REPLACE(q.question_text, '？', ''))) <= 1
                    %s AND (q.question_type = 'SHORT_ANSWER'
                         OR (option_stats.option_count >= 2 AND option_stats.correct_count = 1))
                  ORDER BY %s
@@ -420,6 +422,8 @@ public class LearningController {
                   ) option_stats ON option_stats.question_id = q.id
                  WHERE wn.user_id = ? AND wn.is_relearned = FALSE AND s.code = ?
                    AND q.is_active = TRUE
+                   AND (LENGTH(q.question_text) - LENGTH(REPLACE(q.question_text, '?', ''))
+                      + LENGTH(q.question_text) - LENGTH(REPLACE(q.question_text, '？', ''))) <= 1
                    AND (q.question_type = 'SHORT_ANSWER'
                         OR (option_stats.option_count >= 2 AND option_stats.correct_count = 1))
                  ORDER BY wn.last_wrong_at DESC, q.question_no DESC LIMIT ?
@@ -435,12 +439,15 @@ public class LearningController {
     }
 
     @PostMapping("/diagnosis/check")
+    @Transactional
     public AnswerCheckResponse checkAnswer(
             @Valid @RequestBody AnswerCheckRequest body,
             HttpServletRequest request
     ) {
-        currentUserService.require(request);
-        return answerCheck(body.questionId(), body.selectedOptionId());
+        UserRecord user = currentUserService.require(request);
+        AnswerCheckResponse checked = answerCheck(body.questionId(), body.selectedOptionId());
+        persistImmediateMultipleChoiceAnswer(user.id(), body.questionId(), body.selectedOptionId(), checked.correct());
+        return checked;
     }
 
     @PostMapping("/diagnosis/check-short-answer")
@@ -791,9 +798,11 @@ public class LearningController {
              LEFT JOIN diagnosis_answers da
                     ON da.attempt_id = wn.last_attempt_id AND da.question_id = wn.question_id
              LEFT JOIN question_options selected ON selected.id = da.selected_option_id
-             LEFT JOIN question_options correct
+                 LEFT JOIN question_options correct
                     ON correct.question_id = q.id AND correct.is_correct = TRUE
                  WHERE wn.user_id = ?
+                   AND (LENGTH(q.question_text) - LENGTH(REPLACE(q.question_text, '?', ''))
+                      + LENGTH(q.question_text) - LENGTH(REPLACE(q.question_text, '？', ''))) <= 1
                  ORDER BY wn.is_relearned ASC, wn.last_wrong_at DESC, wn.question_id
                 """, (rs, rowNum) -> new WrongNoteResponse(
                 rs.getLong("question_id"),
@@ -814,19 +823,23 @@ public class LearningController {
 
     private DiagnosisSummaryResponse latestDiagnosis(long userId) {
         return jdbcTemplate.query("""
-                SELECT id, total_questions, correct_answers, completed_at
+                SELECT MAX(id) AS id,
+                       COALESCE(SUM(total_questions), 0) AS total_questions,
+                       COALESCE(SUM(correct_answers), 0) AS correct_answers,
+                       MAX(completed_at) AS completed_at
                  FROM diagnosis_attempts
                  WHERE user_id = ?
                    AND attempt_status = 'COMPLETED'
                    AND DATE(completed_at) = CURRENT_DATE
-                 ORDER BY completed_at DESC, id DESC
-                 LIMIT 1
+                HAVING COUNT(*) > 0
                 """, (rs, rowNum) -> new DiagnosisSummaryResponse(
                 rs.getLong("id"),
                 rs.getInt("total_questions"),
                 rs.getInt("correct_answers"),
                 rs.getTimestamp("completed_at").toLocalDateTime()
-        ), userId).stream().findFirst().orElse(null);
+        ), userId).stream()
+                .filter(summary -> summary.totalQuestions() > 0)
+                .findFirst().orElse(null);
     }
 
     private SubjectResponse findActiveSubject(String code) {
@@ -921,6 +934,56 @@ public class LearningController {
                 HttpStatus.BAD_REQUEST,
                 "선택한 과목의 문제와 보기가 일치하지 않습니다."
         ));
+    }
+
+    /**
+     * Each multiple-choice answer is persisted when it is graded.  Waiting for
+     * all five questions made a wrong answer disappear when a learner left the
+     * quiz midway.
+     */
+    private void persistImmediateMultipleChoiceAnswer(
+            long userId,
+            long questionId,
+            long selectedOptionId,
+            boolean correct
+    ) {
+        Long subjectId = jdbcTemplate.query("""
+                SELECT subject_id
+                  FROM diagnosis_questions
+                 WHERE id = ? AND is_active = TRUE
+                """, (rs, rowNum) -> rs.getLong("subject_id"), questionId)
+                .stream().findFirst().orElseThrow(() -> new ApiException(
+                        HttpStatus.BAD_REQUEST, "문제를 확인해 주세요."
+                ));
+        LocalDateTime now = LocalDateTime.now();
+        long attemptId = insertAndReturnId("""
+                INSERT INTO diagnosis_attempts (
+                    user_id, subject_id, attempt_type, attempt_status,
+                    total_questions, correct_answers, started_at, completed_at
+                ) VALUES (?, ?, 'DIAGNOSTIC', 'COMPLETED', 1, ?, ?, ?)
+                """, userId, subjectId, correct ? 1 : 0,
+                Timestamp.valueOf(now.minusSeconds(1)), Timestamp.valueOf(now));
+        jdbcTemplate.update("""
+                INSERT INTO diagnosis_answers (
+                    attempt_id, question_id, selected_option_id, is_correct, answered_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """, attemptId, questionId, selectedOptionId, correct, Timestamp.valueOf(now));
+        if (!correct) {
+            jdbcTemplate.update("""
+                    INSERT INTO wrong_notes (
+                        user_id, question_id, last_attempt_id, wrong_count,
+                        is_relearned, first_wrong_at, last_wrong_at, relearned_at
+                    ) VALUES (?, ?, ?, 1, FALSE, ?, ?, NULL)
+                    ON DUPLICATE KEY UPDATE
+                        last_attempt_id = VALUES(last_attempt_id),
+                        wrong_count = wrong_count + 1,
+                        is_relearned = FALSE,
+                        last_wrong_at = VALUES(last_wrong_at),
+                        relearned_at = NULL
+                    """, userId, questionId, attemptId,
+                    Timestamp.valueOf(now), Timestamp.valueOf(now));
+        }
+        addDiagnosisStats(userId, 1, correct ? 1 : 0);
     }
 
     private void syncCompletedStepStats(long userId) {

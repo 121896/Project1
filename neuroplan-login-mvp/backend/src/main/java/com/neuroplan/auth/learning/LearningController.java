@@ -346,16 +346,19 @@ public class LearningController {
     public List<QuestionResponse> questions(
             @RequestParam String subjectCode,
             @RequestParam(defaultValue = "false") boolean random,
+            @RequestParam(defaultValue = "") String questionType,
             HttpServletRequest request
     ) {
         currentUserService.require(request);
         String code = subjectCode.trim().toUpperCase(Locale.ROOT);
         String orderBy = random ? "RAND()" : "q.question_no";
+        String typeFilter = "SHORT_ANSWER".equalsIgnoreCase(questionType.trim())
+                ? " AND q.question_type = 'SHORT_ANSWER' " : "";
         List<QuestionResponse> result = jdbcTemplate.query(("""
-                SELECT q.id, q.question_no, q.difficulty, q.question_text, s.code, s.name
+                SELECT q.id, q.question_no, q.difficulty, q.question_text, q.question_type, s.code, s.name
                   FROM diagnosis_questions q
                   JOIN subjects s ON s.id = q.subject_id
-                  JOIN (
+             LEFT JOIN (
                     SELECT question_id,
                            COUNT(*) AS option_count,
                            SUM(CASE WHEN is_correct = TRUE THEN 1 ELSE 0 END) AS correct_count
@@ -365,11 +368,13 @@ public class LearningController {
                  WHERE s.code = ?
                    AND s.is_active = TRUE
                    AND q.is_active = TRUE
-                   AND option_stats.option_count >= 2
-                   AND option_stats.correct_count = 1
+                   AND (LENGTH(q.question_text) - LENGTH(REPLACE(q.question_text, '?', ''))
+                      + LENGTH(q.question_text) - LENGTH(REPLACE(q.question_text, '？', ''))) <= 1
+                   %s AND (q.question_type = 'SHORT_ANSWER'
+                        OR (option_stats.option_count >= 2 AND option_stats.correct_count = 1))
                  ORDER BY %s
                  LIMIT ?
-                """).formatted(orderBy), (rs, rowNum) -> {
+                """).formatted(typeFilter, orderBy), (rs, rowNum) -> {
             long questionId = rs.getLong("id");
             List<OptionResponse> options = jdbcTemplate.query("""
                     SELECT id, option_no, option_text
@@ -386,6 +391,7 @@ public class LearningController {
                     rs.getInt("question_no"),
                     rs.getString("difficulty"),
                     rs.getString("question_text"),
+                    rs.getString("question_type"),
                     rs.getString("code"),
                     rs.getString("name"),
                     options
@@ -405,17 +411,21 @@ public class LearningController {
         UserRecord user = currentUserService.require(request);
         String code = subjectCode.trim().toUpperCase(Locale.ROOT);
         return jdbcTemplate.query("""
-                SELECT q.id, q.question_no, q.difficulty, q.question_text, s.code, s.name
+                SELECT q.id, q.question_no, q.difficulty, q.question_text, q.question_type, s.code, s.name
                   FROM wrong_notes wn
                   JOIN diagnosis_questions q ON q.id = wn.question_id
                   JOIN subjects s ON s.id = q.subject_id
-                  JOIN (
+             LEFT JOIN (
                     SELECT question_id, COUNT(*) AS option_count,
                            SUM(CASE WHEN is_correct = TRUE THEN 1 ELSE 0 END) AS correct_count
                       FROM question_options GROUP BY question_id
                   ) option_stats ON option_stats.question_id = q.id
                  WHERE wn.user_id = ? AND wn.is_relearned = FALSE AND s.code = ?
-                   AND q.is_active = TRUE AND option_stats.option_count >= 2 AND option_stats.correct_count = 1
+                   AND q.is_active = TRUE
+                   AND (LENGTH(q.question_text) - LENGTH(REPLACE(q.question_text, '?', ''))
+                      + LENGTH(q.question_text) - LENGTH(REPLACE(q.question_text, '？', ''))) <= 1
+                   AND (q.question_type = 'SHORT_ANSWER'
+                        OR (option_stats.option_count >= 2 AND option_stats.correct_count = 1))
                  ORDER BY wn.last_wrong_at DESC, q.question_no DESC LIMIT ?
                 """, (rs, rowNum) -> {
             long questionId = rs.getLong("id");
@@ -424,17 +434,71 @@ public class LearningController {
                     """, (optionRs, optionRow) -> new OptionResponse(
                     optionRs.getLong("id"), optionRs.getInt("option_no"), optionRs.getString("option_text")), questionId);
             return new QuestionResponse(questionId, rs.getInt("question_no"), rs.getString("difficulty"),
-                    rs.getString("question_text"), rs.getString("code"), rs.getString("name"), options);
+                    rs.getString("question_text"), rs.getString("question_type"), rs.getString("code"), rs.getString("name"), options);
         }, user.id(), code, DIAGNOSIS_QUESTION_COUNT);
     }
 
     @PostMapping("/diagnosis/check")
+    @Transactional
     public AnswerCheckResponse checkAnswer(
             @Valid @RequestBody AnswerCheckRequest body,
             HttpServletRequest request
     ) {
-        currentUserService.require(request);
-        return answerCheck(body.questionId(), body.selectedOptionId());
+        UserRecord user = currentUserService.require(request);
+        AnswerCheckResponse checked = answerCheck(body.questionId(), body.selectedOptionId());
+        persistImmediateMultipleChoiceAnswer(user.id(), body.questionId(), body.selectedOptionId(), checked.correct());
+        return checked;
+    }
+
+    @PostMapping("/diagnosis/check-short-answer")
+    @Transactional
+    public ShortAnswerCheckResponse checkShortAnswer(
+            @Valid @RequestBody ShortAnswerCheckRequest body,
+            HttpServletRequest request
+    ) {
+        UserRecord user = currentUserService.require(request);
+        String answer = body.answerText().trim();
+        ShortAnswerRow question = jdbcTemplate.query("""
+                SELECT q.id, q.subject_id, q.question_text, q.explanation, q.reference_answer,
+                       q.accepted_answers_json
+                  FROM diagnosis_questions q
+                 WHERE q.id = ? AND q.question_type = 'SHORT_ANSWER' AND q.is_active = TRUE
+                """, (rs, rowNum) -> new ShortAnswerRow(rs.getLong("id"), rs.getLong("subject_id"),
+                rs.getString("question_text"), rs.getString("explanation"), rs.getString("reference_answer"),
+                rs.getString("accepted_answers_json")), body.questionId()).stream().findFirst().orElseThrow(() ->
+                new ApiException(HttpStatus.BAD_REQUEST, "주관식 문제를 확인해 주세요."));
+        String normalized = answer.toLowerCase(Locale.ROOT);
+        boolean correct = question.referenceAnswer() != null
+                && normalized.equals(question.referenceAnswer().trim().toLowerCase(Locale.ROOT));
+        if (!correct && question.acceptedAnswersJson() != null) {
+            correct = question.acceptedAnswersJson().toLowerCase(Locale.ROOT)
+                    .contains("\"" + normalized.replace("\"", "") + "\"");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        long attemptId = insertAndReturnId("""
+                INSERT INTO diagnosis_attempts (user_id, subject_id, attempt_type, attempt_status,
+                    total_questions, correct_answers, started_at, completed_at)
+                VALUES (?, ?, 'DIAGNOSTIC', 'COMPLETED', 1, ?, ?, ?)
+                """, user.id(), question.subjectId(), correct ? 1 : 0,
+                Timestamp.valueOf(now.minusSeconds(1)), Timestamp.valueOf(now));
+        jdbcTemplate.update("""
+                INSERT INTO diagnosis_answers (attempt_id, question_id, selected_option_id, answer_text,
+                    is_correct, evaluation_detail, evaluated_by, evaluated_at, answered_at)
+                VALUES (?, ?, NULL, ?, ?, NULL, 'RULE', ?, ?)
+                """, attemptId, question.id(), answer, correct, Timestamp.valueOf(now), Timestamp.valueOf(now));
+        if (!correct) {
+            jdbcTemplate.update("""
+                    INSERT INTO wrong_notes (user_id, question_id, last_attempt_id, wrong_count,
+                        is_relearned, first_wrong_at, last_wrong_at, relearned_at)
+                    VALUES (?, ?, ?, 1, FALSE, ?, ?, NULL)
+                    ON DUPLICATE KEY UPDATE last_attempt_id = VALUES(last_attempt_id),
+                        wrong_count = wrong_count + 1, is_relearned = FALSE,
+                        last_wrong_at = VALUES(last_wrong_at), relearned_at = NULL
+                    """, user.id(), question.id(), attemptId, Timestamp.valueOf(now), Timestamp.valueOf(now));
+        }
+        addDiagnosisStats(user.id(), 1, correct ? 1 : 0);
+        return new ShortAnswerCheckResponse(correct, correct ? "정답입니다." : "답안을 다시 확인해 주세요.",
+                question.referenceAnswer(), question.explanation());
     }
 
     @PostMapping("/diagnosis/attempts")
@@ -724,9 +788,9 @@ public class LearningController {
     private List<WrongNoteResponse> wrongNotesFor(long userId) {
         return jdbcTemplate.query("""
                 SELECT wn.question_id, s.code AS subject_code, s.name AS subject_name,
-                       q.question_text, q.explanation,
+                       q.question_text, q.explanation, q.reference_answer,
                        wn.wrong_count, wn.is_relearned, wn.last_wrong_at, wn.relearned_at,
-                       selected.option_text AS selected_option_text,
+                       COALESCE(da.answer_text, selected.option_text) AS selected_answer,
                        correct.option_text AS correct_option_text
                   FROM wrong_notes wn
                   JOIN diagnosis_questions q ON q.id = wn.question_id
@@ -734,9 +798,11 @@ public class LearningController {
              LEFT JOIN diagnosis_answers da
                     ON da.attempt_id = wn.last_attempt_id AND da.question_id = wn.question_id
              LEFT JOIN question_options selected ON selected.id = da.selected_option_id
-                  JOIN question_options correct
+                 LEFT JOIN question_options correct
                     ON correct.question_id = q.id AND correct.is_correct = TRUE
                  WHERE wn.user_id = ?
+                   AND (LENGTH(q.question_text) - LENGTH(REPLACE(q.question_text, '?', ''))
+                      + LENGTH(q.question_text) - LENGTH(REPLACE(q.question_text, '？', ''))) <= 1
                  ORDER BY wn.is_relearned ASC, wn.last_wrong_at DESC, wn.question_id
                 """, (rs, rowNum) -> new WrongNoteResponse(
                 rs.getLong("question_id"),
@@ -744,8 +810,10 @@ public class LearningController {
                 rs.getString("subject_name"),
                 rs.getString("question_text"),
                 rs.getString("explanation"),
-                rs.getString("selected_option_text"),
-                rs.getString("correct_option_text"),
+                rs.getString("selected_answer"),
+                rs.getString("correct_option_text") != null
+                        ? rs.getString("correct_option_text")
+                        : rs.getString("reference_answer"),
                 rs.getInt("wrong_count"),
                 rs.getBoolean("is_relearned"),
                 rs.getTimestamp("last_wrong_at").toLocalDateTime(),
@@ -755,19 +823,23 @@ public class LearningController {
 
     private DiagnosisSummaryResponse latestDiagnosis(long userId) {
         return jdbcTemplate.query("""
-                SELECT id, total_questions, correct_answers, completed_at
+                SELECT MAX(id) AS id,
+                       COALESCE(SUM(total_questions), 0) AS total_questions,
+                       COALESCE(SUM(correct_answers), 0) AS correct_answers,
+                       MAX(completed_at) AS completed_at
                  FROM diagnosis_attempts
                  WHERE user_id = ?
                    AND attempt_status = 'COMPLETED'
                    AND DATE(completed_at) = CURRENT_DATE
-                 ORDER BY completed_at DESC, id DESC
-                 LIMIT 1
+                HAVING COUNT(*) > 0
                 """, (rs, rowNum) -> new DiagnosisSummaryResponse(
                 rs.getLong("id"),
                 rs.getInt("total_questions"),
                 rs.getInt("correct_answers"),
                 rs.getTimestamp("completed_at").toLocalDateTime()
-        ), userId).stream().findFirst().orElse(null);
+        ), userId).stream()
+                .filter(summary -> summary.totalQuestions() > 0)
+                .findFirst().orElse(null);
     }
 
     private SubjectResponse findActiveSubject(String code) {
@@ -862,6 +934,56 @@ public class LearningController {
                 HttpStatus.BAD_REQUEST,
                 "선택한 과목의 문제와 보기가 일치하지 않습니다."
         ));
+    }
+
+    /**
+     * Each multiple-choice answer is persisted when it is graded.  Waiting for
+     * all five questions made a wrong answer disappear when a learner left the
+     * quiz midway.
+     */
+    private void persistImmediateMultipleChoiceAnswer(
+            long userId,
+            long questionId,
+            long selectedOptionId,
+            boolean correct
+    ) {
+        Long subjectId = jdbcTemplate.query("""
+                SELECT subject_id
+                  FROM diagnosis_questions
+                 WHERE id = ? AND is_active = TRUE
+                """, (rs, rowNum) -> rs.getLong("subject_id"), questionId)
+                .stream().findFirst().orElseThrow(() -> new ApiException(
+                        HttpStatus.BAD_REQUEST, "문제를 확인해 주세요."
+                ));
+        LocalDateTime now = LocalDateTime.now();
+        long attemptId = insertAndReturnId("""
+                INSERT INTO diagnosis_attempts (
+                    user_id, subject_id, attempt_type, attempt_status,
+                    total_questions, correct_answers, started_at, completed_at
+                ) VALUES (?, ?, 'DIAGNOSTIC', 'COMPLETED', 1, ?, ?, ?)
+                """, userId, subjectId, correct ? 1 : 0,
+                Timestamp.valueOf(now.minusSeconds(1)), Timestamp.valueOf(now));
+        jdbcTemplate.update("""
+                INSERT INTO diagnosis_answers (
+                    attempt_id, question_id, selected_option_id, is_correct, answered_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """, attemptId, questionId, selectedOptionId, correct, Timestamp.valueOf(now));
+        if (!correct) {
+            jdbcTemplate.update("""
+                    INSERT INTO wrong_notes (
+                        user_id, question_id, last_attempt_id, wrong_count,
+                        is_relearned, first_wrong_at, last_wrong_at, relearned_at
+                    ) VALUES (?, ?, ?, 1, FALSE, ?, ?, NULL)
+                    ON DUPLICATE KEY UPDATE
+                        last_attempt_id = VALUES(last_attempt_id),
+                        wrong_count = wrong_count + 1,
+                        is_relearned = FALSE,
+                        last_wrong_at = VALUES(last_wrong_at),
+                        relearned_at = NULL
+                    """, userId, questionId, attemptId,
+                    Timestamp.valueOf(now), Timestamp.valueOf(now));
+        }
+        addDiagnosisStats(userId, 1, correct ? 1 : 0);
     }
 
     private void syncCompletedStepStats(long userId) {
@@ -1087,6 +1209,7 @@ public class LearningController {
             int questionNo,
             String difficulty,
             String text,
+            String questionType,
             String subjectCode,
             String subjectName,
             List<OptionResponse> options
@@ -1095,6 +1218,10 @@ public class LearningController {
     public record OptionResponse(long id, int optionNo, String text) {}
 
     public record AnswerCheckRequest(long questionId, long selectedOptionId) {}
+
+    public record ShortAnswerCheckRequest(long questionId, @NotBlank @Size(max = 2000) String answerText) {}
+
+    public record ShortAnswerCheckResponse(boolean correct, String feedback, String referenceAnswer, String explanation) {}
 
     public record AnswerCheckResponse(boolean correct, long correctOptionId, String explanation) {}
 
@@ -1132,4 +1259,6 @@ public class LearningController {
             String subjectName
     ) {}
     private record ResolvedAnswer(AttemptAnswerRequest request, AnswerCheckResponse checked) {}
+    private record ShortAnswerRow(long id, long subjectId, String questionText, String explanation,
+                                  String referenceAnswer, String acceptedAnswersJson) {}
 }

@@ -418,10 +418,11 @@ public class AiFeatureController {
                 .stream().findFirst().orElse(0);
         int[] nextQuestionNo = { highestQuestionNo == null ? 1 : highestQuestionNo + 1 };
         Set<String> knownHashes = existingQuestionHashes(focus.subjectId());
+        Set<String> generatedTexts = new HashSet<>();
         List<QuizQuestionContent> uniqueQuestions = new ArrayList<>();
         for (QuizQuestionContent question : generated.content().questions()) {
             String hash = questionContentHash(question);
-            if (!knownHashes.add(hash)) continue;
+            if (!knownHashes.add(hash) || !generatedTexts.add(normalizeHashText(question.text()))) continue;
             uniqueQuestions.add(question);
         }
         if (uniqueQuestions.size() != generated.content().questions().size()) {
@@ -480,10 +481,11 @@ public class AiFeatureController {
                 SELECT content_hash FROM diagnosis_questions
                  WHERE subject_id = ? AND content_hash IS NOT NULL
                 """, String.class, focus.subjectId()));
+        Set<String> generatedTexts = new HashSet<>();
         List<ShortAnswerQuestionContent> uniqueQuestions = new ArrayList<>();
         for (ShortAnswerQuestionContent question : generated.content().questions()) {
             String hash = shortAnswerContentHash(question);
-            if (!knownHashes.add(hash)) continue;
+            if (!knownHashes.add(hash) || !generatedTexts.add(normalizeHashText(question.text()))) continue;
             uniqueQuestions.add(question);
         }
         if (uniqueQuestions.size() != generated.content().questions().size()) {

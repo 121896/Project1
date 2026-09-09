@@ -14,3 +14,7 @@ ENV HOME=/tmp
 USER 1001
 EXPOSE 8080
 ENTRYPOINT ["nginx", "-g", "daemon off;"]
+
+# CI verification: frontend-only deployment
+
+# CI verification: simultaneous deployment

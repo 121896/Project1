@@ -138,31 +138,6 @@ pipeline {
             }
         }
 
-        stage('Harbor Login') {
-            when {
-                expression {
-                    env.FRONTEND_CHANGED == 'true' ||
-                    env.BACKEND_CHANGED == 'true'
-                }
-            }
-
-            steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'harbor-registry',
-                        usernameVariable: 'HARBOR_USERNAME',
-                        passwordVariable: 'HARBOR_PASSWORD'
-                    )
-                ]) {
-                    sh '''
-                        set -eu
-                        printf '%s' "$HARBOR_PASSWORD" | docker login harbor.nplan.local:80 \
-                          --username "$HARBOR_USERNAME" --password-stdin
-                    '''
-                }
-            }
-        }
-
 
         stage('Push Frontend') {
             when {

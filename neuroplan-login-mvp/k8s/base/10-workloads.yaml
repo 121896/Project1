@@ -25,6 +25,7 @@ data:
   LLM_DAILY_TOKEN_LIMIT: "30000"
   GEMINI_CONNECT_TIMEOUT_SECONDS: "5"
   GEMINI_READ_TIMEOUT_SECONDS: "60"
+  DEMO_READINESS_FAIL: "false"
 ---
 apiVersion: apps/v1
 kind: Deployment

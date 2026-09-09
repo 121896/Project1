@@ -49,6 +49,8 @@ app:
     daily-token-limit: ${LLM_DAILY_TOKEN_LIMIT:30000}
     connect-timeout-seconds: ${GEMINI_CONNECT_TIMEOUT_SECONDS:5}
     read-timeout-seconds: ${GEMINI_READ_TIMEOUT_SECONDS:60}
+  deployment-safety:
+    readiness-fail: ${DEMO_READINESS_FAIL:false}
 
 management:
   endpoints:
@@ -62,7 +64,7 @@ management:
       show-details: never
       group:
         readiness:
-          include: readinessState,db
+          include: readinessState,db,deploymentSafety
   metrics:
     distribution:
       percentiles-histogram:

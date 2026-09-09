@@ -108,6 +108,7 @@
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   let themeTransitionTimer = null;
+  let userMenuCloseTimer = null;
 
   function applyTheme(darkMode, { animate = false } = {}) {
     if (animate && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -453,15 +454,27 @@
 
   function openUserMenu() {
     if (!state.authenticated) return;
+    clearTimeout(userMenuCloseTimer);
+    $("#userDropdown").classList.remove("user-menu-closing");
     $("#userDropdown").hidden = false;
     $("#userMenuScrim").hidden = false;
     $("#userMenuButton").setAttribute("aria-expanded", "true");
   }
 
   function closeUserMenu({ restoreFocus = false } = {}) {
-    $("#userDropdown").hidden = true;
     $("#userMenuScrim").hidden = true;
     $("#userMenuButton").setAttribute("aria-expanded", "false");
+    const dropdown = $("#userDropdown");
+    if (!dropdown.hidden && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      dropdown.classList.add("user-menu-closing");
+      clearTimeout(userMenuCloseTimer);
+      userMenuCloseTimer = setTimeout(() => {
+        dropdown.classList.remove("user-menu-closing");
+        dropdown.hidden = true;
+      }, 180);
+    } else {
+      dropdown.hidden = true;
+    }
     if (restoreFocus && state.authenticated) $("#userMenuButton").focus();
   }
 
@@ -635,6 +648,7 @@
     });
     $$('[data-page]').forEach(button => button.classList.toggle("active", button.dataset.page === page));
     if (page === "history") await loadPlanHistory();
+    if (page === "wrong") await loadWrongNotes();
     if (page === "account") updateReauthStatus();
     if (updateLocation && routedPages.has(page)) {
       window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${page}`);
@@ -1210,6 +1224,14 @@
       if (throwOnError) throw error;
       toast(error.message);
     }
+  }
+
+  async function loadWrongNotes() {
+    if (!state.authenticated) return;
+    state.wrongNotes = apiConfig.enabled
+      ? ((await apiRequest("/learning/wrong-notes")) || [])
+      : state.wrongNotes;
+    renderWrongNotes();
   }
 
   async function refreshCurrentPage() {
@@ -1829,7 +1851,7 @@
           aiQuizRunId = null;
         } else {
           questions = apiConfig.enabled
-            ? await apiRequest(`/learning/diagnosis/questions?subjectCode=${encodeURIComponent(code)}${isCertificationSubject(code) ? "&random=true" : ""}`)
+            ? await apiRequest(`/learning/diagnosis/questions?subjectCode=${encodeURIComponent(code)}${isCertificationSubject(code) ? "&random=true" : ""}${isPracticalCertification(code) ? "&questionType=SHORT_ANSWER" : ""}`)
             : fallbackQuestions;
           aiQuizRunId = useAi ? 1 : null;
         }
@@ -1861,7 +1883,7 @@
   function renderQuestion() {
     const question = questions[quizIndex];
     const shortAnswer = question.questionType === "SHORT_ANSWER";
-    $("#quizTitle").textContent = shortAnswer ? "AI 주관식 문제" : quizMode === "AI" ? "AI 확인 문제" : quizMode === "WRONG" ? "오답 다시 풀기" : "오늘의 확인 문제";
+    $("#quizTitle").textContent = shortAnswer ? (quizMode === "AI_SHORT" ? "AI 주관식 문제" : "주관식 문제") : quizMode === "AI" ? "AI 확인 문제" : quizMode === "WRONG" ? "오답 다시 풀기" : "오늘의 확인 문제";
     $("#questionCounter").textContent = `${quizIndex + 1} / ${questions.length}`;
     $("#quizProgressBar").style.width = `${((quizIndex + 1) / questions.length) * 100}%`;
     $("#questionSubject").textContent = `${question.subjectName} · ${question.difficulty}`;
@@ -2722,8 +2744,10 @@
         if (question.questionType === "SHORT_ANSWER") {
           const answerText = shortAnswerText.trim();
           if (!answerText) throw new Error("답안을 입력해 주세요.");
-          if (!apiConfig.enabled) throw new Error("AI 주관식 답안 검토는 서버 연결 후 사용할 수 있습니다.");
-          const checked = await apiRequest(`/ai/questions/${aiQuizRunId}/short-answer/check`, {
+          if (!apiConfig.enabled) throw new Error("주관식 답안 검토는 서버 연결 후 사용할 수 있습니다.");
+          const checked = await apiRequest(quizMode === "AI_SHORT"
+            ? `/ai/questions/${aiQuizRunId}/short-answer/check`
+            : "/learning/diagnosis/check-short-answer", {
             method: "POST",
             body: JSON.stringify({ questionId: question.id, answerText })
           });
@@ -2733,10 +2757,12 @@
           $("#shortAnswerInput").disabled = true;
           $("#explanation").textContent = checked.correct
             ? "정답으로 인정됐습니다."
-            : `보완이 필요한 답안입니다. ${checked.feedback}\n점수: ${checked.score}점\n모범 답안: ${checked.modelAnswer}`;
+            : `보완이 필요한 답안입니다. ${checked.feedback || ""}${checked.score == null ? "" : `\n점수: ${checked.score}점`}\n모범 답안: ${checked.modelAnswer || checked.referenceAnswer || "확인 필요"}`;
           $("#explanation").hidden = false;
           $("#nextQuestion").textContent = quizIndex === questions.length - 1 ? "결과 확인" : "다음 문제";
           updateAiQuota(checked.quota);
+          // 주관식 오답은 채점 직후 다시 불러와 오답 노트에 즉시 반영합니다.
+          if (!checked.correct) await loadWrongNotes();
           return;
         }
         const selectedOption = question.options.find(option => option.id === chosenAnswer);
@@ -2784,7 +2810,7 @@
 
     $("#nextQuestion").disabled = true;
     try {
-      if (quizMode === "AI_SHORT") {
+      if (quizMode === "AI_SHORT" || quizAnswers.some(answer => answer.answerText)) {
         state.quizCorrect = quizScore;
         state.quizTotal = questions.length;
         await loadLearningState();

@@ -25,6 +25,7 @@ data:
   LLM_DAILY_TOKEN_LIMIT: "30000"
   GEMINI_CONNECT_TIMEOUT_SECONDS: "5"
   GEMINI_READ_TIMEOUT_SECONDS: "60"
+  DEMO_READINESS_FAIL: "false"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -114,6 +115,13 @@ metadata:
 spec:
   # 세션 상태를 MariaDB jwt_sessions에 저장하므로 복제본 간 로그인이 유지됩니다.
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # 신규 Pod가 Ready가 되기 전까지 기존 정상 Pod를 유지합니다.
+      maxUnavailable: 0
+      # 장애 시연 시 신규 버전 Pod는 한 개만 추가 기동합니다.
+      maxSurge: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: neuroplan-backend

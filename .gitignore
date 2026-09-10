@@ -1,16 +1,8 @@
-# Local credentials and generated artifacts
-.env
+# Local preview state and development secrets
+neuroplan-login-mvp/frontend/.preview-server.pid
 *.secret.yaml
-*.pem
-*.key
-*.crt
-*.p12
-*.pfx
-*.kubeconfig
-vault-password*
-credentials/
-secrets/
-*.db
-*.db.sha256
-*.log
+.env
 neuroplan-login-mvp-*-bundle.zip
+
+# Java build output
+neuroplan-login-mvp/backend/target/

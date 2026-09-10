@@ -232,21 +232,31 @@
     return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   }
 
-  function planStepContentHtml(content) {
+  function planStepContentHtml(content, { preserveStepReferences = false } = {}) {
     const normalized = String(content ?? "").replace(/\r/g, "").trim();
     if (!normalized) return '<p class="plan-step-summary">학습 내용을 준비하고 있습니다.</p>';
+
+    // 오늘의 학습 플랜에서는 `1단계에서`, `2단계에서`처럼 이전 단계를 참조하는
+    // 자연어를 목록 번호로 오인해 앞부분을 잘라내지 않습니다. 다음 학습 추천은 기존
+    // 번호 목록 형식을 유지합니다.
+    const stageListMarker = preserveStepReferences
+      ? "\\d{1,2}단계(?:\\s*\\([^)]*\\))?\\s*[:.)-]"
+      : "\\d{1,2}단계(?:\\s*\\([^)]*\\))?\\s*[:.)-]?";
+    const listMarker = `(?:${stageListMarker}|\\d{1,2}[.)]|[①-⑳]|(?:첫째|둘째|셋째|넷째|다섯째)\\s*[:.)-]?)`;
+    const listBoundary = new RegExp(`[\\s\\u00a0]+(?=${listMarker}[\\s\\u00a0]*)`, "g");
+    const listStart = new RegExp(`^${listMarker}[\\s\\u00a0]*(.+)$`, "s");
 
     const lines = normalized
       // 목록 번호는 `1. `, `1) `, `① `, `1단계: ` 형식을 인식한다.
       // `8.8.8.8`, `1.1.1.1`, 버전 `1.35.4`는 숫자 목록이 아니므로 중간에서 나누지 않는다.
-      .replace(/[\s\u00a0]+(?=(?:\d{1,2}단계(?:\s*\([^)]*\))?\s*[:.)-]?|\d{1,2}[.)]|[①-⑳]|(?:첫째|둘째|셋째|넷째|다섯째)\s*[:.)-]?)[\s\u00a0]*)/g, "\n")
+      .replace(listBoundary, "\n")
       .split(/\n+/)
       .map(value => value.trim())
       .filter(Boolean);
     const intro = [];
     const actions = [];
     lines.forEach(line => {
-      const numbered = line.match(/^(?:\d{1,2}단계(?:\s*\([^)]*\))?\s*[:.)-]?|\d{1,2}[.)]|[①-⑳]|(?:첫째|둘째|셋째|넷째|다섯째)\s*[:.)-]?)[\s\u00a0]*(.+)$/s);
+      const numbered = line.match(listStart);
       if (numbered) {
         // AI가 번호 뒤에 `,`를 붙여도 번호 배지와 본문 사이에는 표시하지 않습니다.
         actions.push(numbered[1].replace(/^[\s,，]+/, "").trim());
@@ -1644,7 +1654,9 @@
       ["One", "Two", "Three"].forEach((suffix, index) => {
         const planStep = state.planSteps.find(item => item.stepNo === index + 1);
         $(`#task${suffix}Title`).textContent = planStep?.title || fallbackTitles[index];
-        $(`#task${suffix}Content`).innerHTML = planStepContentHtml(planStep?.content || fallbackContents[index]);
+        $(`#task${suffix}Content`).innerHTML = planStepContentHtml(planStep?.content || fallbackContents[index], {
+          preserveStepReferences: true
+        });
       });
       $("#planBasis").textContent = state.ai.planRationale?.[focus] || `${focusLabel} 설정 기준`;
       $("#planStatus").textContent = state.quizFinished ? "학습 완료" : completed ? "학습 중" : "플랜 준비됨";
